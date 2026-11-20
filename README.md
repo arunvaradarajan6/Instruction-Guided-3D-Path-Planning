@@ -87,65 +87,6 @@ Run the tests with:
 pytest -m "not slow"
 ```
 
-## Reproducing the paper
-
-All commands run from `src/`.
-
-### 1. Experiments that need no training (CPU is fine)
-
-```bash
-python -m ig3d.experiments e0      # Section IV-A: uniform climb/descent split does not change the path
-python -m ig3d.experiments e2      # Fig. 3: closest one- and two-channel fields vs. the true field
-python -m ig3d.experiments sweep   # Section IV-B: eight settings of the ground-truth parameters
-python -m ig3d.experiments e3      # Fig. 6: linear probes on the instruction vectors
-```
-
-Results are written to `datasets/results/`.
-
-### 2. Train and evaluate the learned models
-
-Six models (one, two, and three channels with one-hot conditioning; three channels with the sentence embedding, NLI, and NLI plus adapter), each with three seeds:
-
-```bash
-python -m ig3d.multiseed train --workers 1    # 18 training runs
-python -m ig3d.multiseed eval --workers 3     # exact planner and PRM on 30 test worlds
-python -m ig3d.multiseed report               # tables, confidence intervals, paired comparisons
-```
-
-Each run takes about 19 minutes on one 8 GB laptop GPU (NVIDIA RTX PRO 2000 Blackwell). Raise `--workers` if you have more GPU memory. Training resumes automatically if interrupted. To train a single model:
-
-```bash
-python -m ig3d.train --k 3 --conditioning nli --seed 0
-```
-
-### 3. Transfer to real aerial LiDAR
-
-Download the USGS 3DEP point-cloud tile
-`USGS_LPC_TX_Central_B1_2017_stratmap17_50cm_3097433c1_LAS_2019.laz`
-from the [USGS National Map](https://apps.nationalmap.gov/downloader/) and place it in `datasets/cache/lidar/`. Then:
-
-```bash
-python -m ig3d.lidar build            # voxelise into 48³ blocks (59 of 63 are used)
-python -m ig3d.lidar ladder           # Fig. 3, Austin panel: no network
-python -m ig3d.lidar eval             # every trained model on every block, no retraining
-python -m ig3d.lidar report
-```
-
-### 4. Figures
-
-```bash
-python -m ig3d.paperfigs     # every paper figure, written to figures/
-```
-
-This needs the results from steps 1 to 3.
-
-## Try your own instruction
-
-```bash
-python -m ig3d.viz demo --ckpt ../datasets/models/k3_nli/best.pt --text "Stay low and keep it level."
-```
-
-This predicts a cost field from your sentence in a synthetic test world, plans on it with the PRM, and saves a figure of the path next to the shortest path (`--index` picks a different world). It needs an `nli` or `embedding` checkpoint, since one-hot models cannot read free text, and the language model must be available locally (see Installation).
 
 ## Citation
 
