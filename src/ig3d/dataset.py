@@ -41,6 +41,33 @@ class VolumeBank:
         return cls(occ, feats)
 
     @classmethod
+    def from_volumes(cls, vols, cost_cfg: CostConfig):
+        occ = np.stack([v.occ for v in vols])
+        feats = {k: np.empty(occ.shape, np.float16) for k in FEATURE_KEYS}
+        for i, v in enumerate(vols):
+            f = volume_features(v, cost_cfg)
+            for k in FEATURE_KEYS:
+                feats[k][i] = f[k]
+        return cls(occ, feats)
+
+    @classmethod
+    def real(cls, cities, cost_cfg: CostConfig):
+        """Every LiDAR block of the given cities, features cached per city."""
+        from .lidar import load_blocks
+        parts = []
+        for c in cities:
+            path = CACHE_DIR / "bank_real_{}_r{}.npz".format(c, cost_cfg.influence_r)
+            if path.exists():
+                z = np.load(path)
+                parts.append(cls(z["occ"], {k: z[k] for k in FEATURE_KEYS}))
+                continue
+            b = cls.from_volumes(load_blocks(city=c), cost_cfg)
+            np.savez(path, occ=b.occ, **b.feats)
+            parts.append(b)
+        return cls(np.concatenate([p.occ for p in parts]),
+                   {k: np.concatenate([p.feats[k] for p in parts]) for k in FEATURE_KEYS})
+
+    @classmethod
     def load_or_build(cls, n, seed, vol_cfg, cost_cfg, tag=""):
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         key = "bank_{}_n{}_s{}_{}x{}x{}_r{}.npz".format(

@@ -10,7 +10,8 @@ from pathlib import Path  # noqa: E402
 
 import numpy as np  # noqa: E402
 
-from .instructions import ALL_LABELS, ALL_SENTENCES, CLASSES  # noqa: E402
+from .instructions import (ALL_LABELS, ALL_SENTENCES, CLASSES, CORPUS,  # noqa: E402
+                           HARD_LABELS, HARD_SENTENCES)
 
 from .paths import CACHE as CACHE_DIR  # noqa: E402
 
@@ -42,6 +43,12 @@ def _is_text(x) -> bool:
         return len(x) > 0 and isinstance(x[0], str)
     except TypeError:
         return False
+
+
+def _cache_name(prefix: str, model_name: str) -> str:
+    """v1 keeps the paper's file names; other corpora get their own file."""
+    tag = "" if CORPUS == "v1" else "_" + CORPUS
+    return prefix + model_name.replace("/", "__") + tag + ".npz"
 
 
 def logodds(p: np.ndarray, eps: float = 1e-4) -> np.ndarray:
@@ -76,7 +83,7 @@ class EmbeddingEncoder:
     @staticmethod
     def _raw(model_name):
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        path = CACHE_DIR / ("emb_" + model_name.replace("/", "__") + ".npz")
+        path = CACHE_DIR / _cache_name("emb_", model_name)
         if path.exists():
             z = np.load(path, allow_pickle=True)
             if list(z["sentences"]) == ALL_SENTENCES:
@@ -116,7 +123,7 @@ class NLIEncoder:
         self.dim = len(POLES)
         self._mdl = None
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        path = CACHE_DIR / ("nli_poles_" + model_name.replace("/", "__") + ".npz")
+        path = CACHE_DIR / _cache_name("nli_poles_", model_name)
         probs = None
         if path.exists():
             z = np.load(path, allow_pickle=True)
@@ -175,6 +182,64 @@ class NLIEncoder:
         if _is_text(x):
             return self.encode_text([x] if isinstance(x, str) else list(x))
         return self.table[x]
+
+
+def cached_text_encoding(enc, sentences, tag: str) -> np.ndarray:
+    """enc.encode_text(sentences), cached on disk under `tag` (e.g. the hard test set)."""
+    name = getattr(enc, "model_name", type(enc).__name__)
+    path = CACHE_DIR / "text_{}_{}_{}.npz".format(type(enc).__name__, name.replace("/", "__"), tag)
+    if path.exists():
+        z = np.load(path, allow_pickle=True)
+        if list(z["sentences"]) == list(sentences):
+            return z["vec"]
+    vec = enc.encode_text(list(sentences)).astype(np.float32)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    np.savez(path, vec=vec, sentences=np.asarray(list(sentences), dtype=object))
+    return vec
+
+
+def encoder_for_checkpoint(meta, model_cfg=None):
+    """Rebuild the text encoder a checkpoint was trained with (None for one-hot)."""
+    from .config import DEFAULT
+    mc = model_cfg or DEFAULT.model
+    cond = meta["conditioning"]
+    if cond == "onehot":
+        return None
+    if cond == "nli":
+        return NLIEncoder(mc.nli_model)
+    if cond == "embedding":
+        return EmbeddingEncoder(mc.encoder_model, np.asarray(meta["train_sent"]), meta["emb_dim"])
+    raise ValueError(cond)
+
+
+def sentence_pool(meta, which: str = "held"):
+    """(vectors (N, E), labels (N,), sentences) for a checkpoint's held / train / hard set.
+
+    held and train index the corpus the checkpoint was trained on. hard is HARD_TEST,
+    encoded fresh: a one-hot model gets the true class (language given), a text model
+    reads the sentence.
+    """
+    table = np.asarray(meta["cond_table"], np.float32)
+    if which in ("held", "train"):
+        idx = np.asarray(meta["held_sent"] if which == "held" else meta["train_sent"])
+        return table[idx], ALL_LABELS[idx], [ALL_SENTENCES[i] for i in idx]
+    if which != "hard":
+        raise ValueError(which)
+    enc = encoder_for_checkpoint(meta)
+    if enc is None:
+        vec = np.eye(len(CLASSES), dtype=np.float32)[HARD_LABELS]
+    else:
+        vec = cached_text_encoding(enc, HARD_SENTENCES, "hard")
+    return vec, HARD_LABELS, list(HARD_SENTENCES)
+
+
+def encode_free_text(meta, text: str) -> np.ndarray:
+    """Conditioning vector for one free-text instruction under a checkpoint's encoder."""
+    enc = encoder_for_checkpoint(meta)
+    if enc is None:
+        raise SystemExit("a one-hot model cannot read free text; give a class name or use an "
+                         "nli / embedding checkpoint")
+    return enc([text])[0]
 
 
 def build_encoder(model_cfg, train_idx):

@@ -6,3 +6,6 @@ tqdm>=4.66
 scikit-learn>=1.4
 pytest>=8.0
 sentence-transformers>=3.0
+laspy[lazrs]>=2.5   # LiDAR (Austin and ig3d.cities)
+pyproj>=3.6         # reads LiDAR units; many USGS tiles are in US survey feet
+mavsdk>=2.0         # Gazebo/PX4 flights (ig3d.sim); not needed for training

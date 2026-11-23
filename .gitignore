@@ -4,3 +4,5 @@ __pycache__/
 datasets/
 .pytest_cache/
 *.tex
+.DS_Store
+FRIEND_GUIDE.md

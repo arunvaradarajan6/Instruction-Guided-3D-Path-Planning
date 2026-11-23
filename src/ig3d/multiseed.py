@@ -27,6 +27,11 @@ MODELS = {
     "k3_embedding": ["--k", "3", "--conditioning", "embedding"],
     "k3_nli": ["--k", "3", "--conditioning", "nli"],
     "k3_nli_adapter": ["--k", "3", "--conditioning", "nli", "--adapter", "64"],
+    # trained on synthetic volumes + LiDAR blocks of the training cities (ig3d.cities)
+    "k1_onehot_real": ["--k", "1", "--conditioning", "onehot", "--real-cities", "train"],
+    "k3_onehot_real": ["--k", "3", "--conditioning", "onehot", "--real-cities", "train"],
+    "k3_nli_adapter_real": ["--k", "3", "--conditioning", "nli", "--adapter", "64",
+                            "--real-cities", "train"],
 }
 BASELINES = ("k3_onehot", "k1_onehot", "k2_onehot", "k3_embedding", "k3_nli")
 
@@ -78,7 +83,7 @@ def eval_one(name, seed, sentences, n=N_TEST):
     _result_path(name, seed, sentences).write_text(json.dumps(res, default=float))
 
 
-def evaluate(names, seeds, workers, sentence_sets=("held", "train")):
+def evaluate(names, seeds, workers, sentence_sets=("held", "train", "hard")):
     jobs = [(n, s, t) for s in seeds for n in names for t in sentence_sets
             if (run_dir(n, s) / "last.pt").exists() and not _result_path(n, s, t).exists()]
     print("{} evaluating {} (model, seed, phrasing) cells with {} workers".format(
@@ -165,7 +170,7 @@ def pair_gap(rows_by_seed, who, a, b, metric):
 
 def report(names=None):
     lines, out = [], {}
-    for sentences in ("held", "train"):
+    for sentences in ("held", "train", "hard"):
         data = load(sentences)
         ms = [n for n in (names or MODELS) if n in data]
         if not ms:
@@ -174,7 +179,8 @@ def report(names=None):
             ms = [n for n in ms if "onehot" not in n]
         seeds_txt = ", ".join("{} {}".format(n, sorted(data[n])) for n in ms)
         lines += ["", "## E1, {} phrasings — seeds: {}".format(
-            "held-out (new wording)" if sentences == "held" else "training (seen wording)",
+            {"held": "held-out (new wording)", "train": "training (seen wording)",
+             "hard": "HARD test set (out-of-register wording, never trained on)"}[sentences],
             seeds_txt), ""]
         for key, title in (("grid_regret", "grid-planner regret, %"),
                            ("prm_regret", "PRM regret (full method), %; relative to a PRM "
@@ -247,7 +253,7 @@ def main(argv=None):
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--name")
     ap.add_argument("--seed", type=int)
-    ap.add_argument("--sentences", choices=["held", "train"])
+    ap.add_argument("--sentences", choices=["held", "train", "hard"])
     a = ap.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")
     warnings.filterwarnings("ignore", message="Mean of empty slice")
@@ -255,7 +261,8 @@ def main(argv=None):
     if a.what == "train":
         train(names, a.seeds, a.workers)
     elif a.what == "eval":
-        evaluate(names, a.seeds, a.workers)
+        evaluate(names, a.seeds, a.workers,
+                 (a.sentences,) if a.sentences else ("held", "train", "hard"))
     elif a.what == "eval-one":
         eval_one(a.name, a.seed, a.sentences)
     else:

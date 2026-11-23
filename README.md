@@ -41,7 +41,8 @@ src/
     volumes.py        synthetic 48³ environments (walls, windows, pillars)
     features.py       clearance, openness, and window features
     costfield.py      direction-dependent cost fields, ground truth, K-channel projections
-    instructions.py   128 hand-written sentences, 8 classes, 16 each
+    instructions.py   8 classes: the paper's 128 sentences (v1), 256 extra training phrasings (v2),
+                      and an 80-sentence hard test set that is never trained on
     encoder.py        one-hot, frozen sentence embedding (MPNet + PCA), and NLI conditioning
     unet3d.py         3D U-Net cost network
     dataset.py        volume banks and the training dataset
@@ -51,7 +52,9 @@ src/
     metrics.py        regret and behavioural path metrics
     experiments.py    experiments that need no training (E0, E2, E3, sweep) and evaluation (E1)
     multiseed.py      training and evaluating every model over three seeds
-    lidar.py          USGS 3DEP aerial LiDAR of downtown Austin as 48³ voxel blocks
+    lidar.py          USGS 3DEP aerial LiDAR as 48³ voxel blocks (Austin, and any city below)
+    cities.py         more LiDAR: 11 training cities, Seattle and Miami held out with Austin
+    sim/              planned path -> flyable trajectory -> Gazebo + PX4 SITL flight -> flown regret
     paperfigs.py      every figure in the paper
     viz.py            extra plots and a free-text demo
   tests/              unit tests
@@ -68,7 +71,7 @@ Python 3.10 or newer. Install PyTorch first, matching your CUDA version, then th
 cd src
 pip install torch --index-url https://download.pytorch.org/whl/cu128   # pick the build for your system
 pip install -r requirements.txt
-pip install "laspy[lazrs]"    # only needed for the Austin LiDAR experiments
+pip install "laspy[lazrs]" pyproj    # only needed for the LiDAR experiments
 ```
 
 The code picks CUDA, then Apple MPS, then CPU automatically.
@@ -79,7 +82,7 @@ The code picks CUDA, then Apple MPS, then CPU automatically.
 HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 python -m ig3d.experiments e3
 ```
 
-After that, the encodings for all 128 sentences are cached in `datasets/cache/`.
+After that, the encodings for every sentence are cached in `datasets/cache/`. Set `IG3D_CORPUS=v2` to train and evaluate with the extra phrasings; the default `v1` reproduces the paper, and v2 checkpoints and results go to `datasets/models_v2/` and `datasets/results_v2/`.
 
 Run the tests with:
 

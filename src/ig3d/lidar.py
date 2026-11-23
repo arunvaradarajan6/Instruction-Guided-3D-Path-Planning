@@ -1,4 +1,8 @@
-"""Real environments: USGS 3DEP aerial LiDAR of downtown Austin, as 48^3 voxel blocks."""
+"""Real environments: USGS 3DEP aerial LiDAR as 48^3 voxel blocks.
+
+Austin (the paper's tile) lives here; other cities come from `ig3d.cities`, which reuses
+`surface`, `blocks_from_surface` and the evaluation below through the `city` argument.
+"""
 from __future__ import annotations
 
 import argparse
@@ -26,7 +30,27 @@ SIZE = 48
 BORDER = 1
 MIN_COVERAGE = 0.95
 OUT = RESULTS / "austin"
+
+
+def out_dir(city: str = "austin"):
+    """Austin keeps the paper's results folder; other cities get results/lidar/<city>."""
+    return OUT if city == "austin" else RESULTS / "lidar" / city
 BEHAVIOUR_KEYS = ("mean_alt", "vertical", "climb_clear", "descend_clear", "length")
+
+
+def unit_scale(header):
+    """(horizontal, vertical) metres per CRS unit; many 3DEP projects are in US survey feet."""
+    try:
+        crs = header.parse_crs()
+    except Exception:  # noqa: BLE001 - laspy/pyproj raise several kinds here
+        crs = None
+    if crs is None:
+        warnings.warn("no CRS in LAS header; assuming metres")
+        return 1.0, 1.0
+    subs = crs.sub_crs_list if crs.is_compound else [crs]
+    h = float(subs[0].axis_info[0].unit_conversion_factor)
+    v = float(subs[1].axis_info[0].unit_conversion_factor) if len(subs) > 1 else h
+    return h, v
 
 
 def surface(path=TILE, voxel_m=VOXEL_M):
@@ -34,11 +58,14 @@ def surface(path=TILE, voxel_m=VOXEL_M):
     import laspy
 
     pts = laspy.read(path)
+    hs, vs = unit_scale(pts.header)
     cls = np.asarray(pts.classification)
     keep = np.isin(cls, KEEP)
     x = np.asarray(pts.x)[keep]
     y = np.asarray(pts.y)[keep]
     z = np.asarray(pts.z)[keep].astype(np.float32)
+    if hs != 1.0 or vs != 1.0:
+        x, y, z = x * hs, y * hs, (z * vs).astype(np.float32)
     x0, y0 = float(x.min()), float(y.min())
     ix = ((x - x0) // voxel_m).astype(np.int64)
     iy = ((y - y0) // voxel_m).astype(np.int64)
@@ -51,7 +78,8 @@ def surface(path=TILE, voxel_m=VOXEL_M):
     top = top[fy, fx]
     dropped = {int(c): int(n) for c, n in zip(*np.unique(cls[~keep], return_counts=True))}
     meta = dict(n_points=int(len(cls)), n_kept=int(keep.sum()), dropped_by_class=dropped,
-                x0=x0, y0=y0, voxel_m=voxel_m, grid=[ny, nx], kept_classes=list(KEEP))
+                x0=x0, y0=y0, voxel_m=voxel_m, grid=[ny, nx], kept_classes=list(KEEP),
+                unit_scale=[hs, vs], source=str(path))
     return top, covered, meta
 
 
@@ -84,21 +112,27 @@ def blocks_path(voxel_m=VOXEL_M):
     return CACHE / "lidar" / "austin_blocks_s{:g}.npz".format(voxel_m)
 
 
-def build(path=TILE, voxel_m=VOXEL_M, seed=0):
-    top, covered, meta = surface(path, voxel_m)
+def blocks_from_surface(top, covered, voxel_m=VOXEL_M, seed=0, stride=SIZE, tag=0):
+    """Cut a column-height surface into SIZE^2 blocks: (volumes, per-block info).
+
+    stride=SIZE gives the paper's non-overlapping blocks; a smaller stride gives
+    overlapping blocks (more training data from one tile). `tag` keeps endpoint RNG
+    streams distinct across tiles.
+    """
     ny, nx = top.shape
     vols, info = [], []
-    for bi in range(ny // SIZE):
-        for bj in range(nx // SIZE):
-            sl = np.s_[bi * SIZE:(bi + 1) * SIZE, bj * SIZE:(bj + 1) * SIZE]
-            rec = dict(block=[bi, bj], coverage=float(covered[sl].mean()))
+    for bi, r0 in enumerate(range(0, ny - SIZE + 1, stride)):
+        for bj, c0 in enumerate(range(0, nx - SIZE + 1, stride)):
+            sl = np.s_[r0:r0 + SIZE, c0:c0 + SIZE]
+            rec = dict(block=[bi, bj], origin=[r0, c0], coverage=float(covered[sl].mean()))
             if rec["coverage"] < MIN_COVERAGE:
                 info.append(dict(rec, used=False, reason="coverage"))
                 continue
             t = top[sl]
             base = float(t.min()) - voxel_m
             occ, h = block_occupancy(t, base, voxel_m)
-            ends = place_endpoints(occ, h, np.random.default_rng((seed, bi, bj)))
+            rng_key = (seed, bi, bj) if tag == 0 else (seed, tag, bi, bj)
+            ends = place_endpoints(occ, h, np.random.default_rng(rng_key))
             if ends is None:
                 info.append(dict(rec, used=False, reason="no valid start/goal"))
                 continue
@@ -106,6 +140,20 @@ def build(path=TILE, voxel_m=VOXEL_M, seed=0):
             info.append(dict(rec, used=True, index=len(vols) - 1, base_m=base,
                              relief_m=float(t.max() - t.min()),
                              solid_frac=float(occ[1:-1, 1:-1, 1:-1].mean()), start_z=ends[0][0]))
+    return vols, info
+
+
+def save_blocks(out, vols, meta, info):
+    out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out, occ=np.stack([v.occ for v in vols]),
+                        start=np.asarray([v.start for v in vols]),
+                        goal=np.asarray([v.goal for v in vols]))
+    out.with_suffix(".json").write_text(json.dumps(dict(meta=meta, blocks=info), indent=1))
+
+
+def build(path=TILE, voxel_m=VOXEL_M, seed=0):
+    top, covered, meta = surface(path, voxel_m)
+    vols, info = blocks_from_surface(top, covered, voxel_m, seed)
     out = blocks_path(voxel_m)
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out, occ=np.stack([v.occ for v in vols]),
@@ -115,7 +163,10 @@ def build(path=TILE, voxel_m=VOXEL_M, seed=0):
     return vols, meta, info
 
 
-def load_blocks(voxel_m=VOXEL_M):
+def load_blocks(voxel_m=VOXEL_M, city: str = "austin"):
+    if city != "austin":
+        from .cities import load_city_blocks
+        return load_city_blocks(city, voxel_m)
     z = np.load(blocks_path(voxel_m))
     return [Volume(occ=o, start=tuple(int(a) for a in s), goal=tuple(int(a) for a in g))
             for o, s, g in zip(z["occ"], z["start"], z["goal"])]
@@ -154,18 +205,18 @@ def learned(ckpt, vols, sentences="held", seed=0):
     dev = get_device()
     model, meta = load_model(ckpt, dev)
     ccfg = CostConfig(**meta["config"]["cost"])
-    table = np.asarray(meta["cond_table"], np.float32)
-    pool = np.asarray(meta["held_sent"] if sentences == "held" else meta["train_sent"])
+    from .encoder import sentence_pool
+    pool_vec, pool_lab, _ = sentence_pool(meta, sentences)
     rng = np.random.default_rng(seed)
     rows = []
     for vi, v in enumerate(vols):
         G = GridGraph(v.occ)
         f = volume_features(v, ccfg)
         for cls in REAL_CLASSES:
-            si = int(rng.choice(pool[ALL_LABELS[pool] == CLASSES.index(cls)]))
+            si = int(rng.choice(np.flatnonzero(pool_lab == CLASSES.index(cls))))
             truth = gt_field_from_features(v.occ, f, cls, ccfg, 3)
             p_opt, c_opt = G.plan(truth, v.start, v.goal)
-            pg, _ = G.plan(predict(model, v.occ, table[si], ccfg, dev), v.start, v.goal)
+            pg, _ = G.plan(predict(model, v.occ, pool_vec[si], ccfg, dev), v.start, v.goal)
             bp, bo = behaviour(v, pg, f["edt"]), behaviour(v, p_opt, f["edt"])
             rec = dict(vol=vi, cls=cls, sent=si, grid_regret=regret(path_cost(truth, pg), c_opt))
             for key in BEHAVIOUR_KEYS:
@@ -174,35 +225,37 @@ def learned(ckpt, vols, sentences="held", seed=0):
     return rows
 
 
-def _result_path(name, seed, sentences):
-    return OUT / "e1_{}_{}_s{}.json".format(sentences, name, seed)
+def _result_path(name, seed, sentences, city="austin"):
+    return out_dir(city) / "e1_{}_{}_s{}.json".format(sentences, name, seed)
 
 
-def eval_one(name, seed, sentences):
+def eval_one(name, seed, sentences, city="austin"):
     from .multiseed import run_dir
-    rows = learned(run_dir(name, seed) / "best.pt", load_blocks(), sentences, seed)
-    OUT.mkdir(parents=True, exist_ok=True)
-    _result_path(name, seed, sentences).write_text(
+    rows = learned(run_dir(name, seed) / "best.pt", load_blocks(city=city), sentences, seed)
+    out_dir(city).mkdir(parents=True, exist_ok=True)
+    _result_path(name, seed, sentences, city).write_text(
         json.dumps(dict(name=name, seed=seed, sentences=sentences, rows=rows), default=float))
 
 
-def evaluate(names, seeds, workers, sentence_sets=("held",)):
+def evaluate(names, seeds, workers, sentence_sets=("held",), city="austin"):
     from .multiseed import _run, _stamp, run_dir
     jobs = [(n, s, t) for s in seeds for n in names for t in sentence_sets
-            if (run_dir(n, s) / "last.pt").exists() and not _result_path(n, s, t).exists()]
-    print("{} evaluating {} (model, seed) cells on Austin blocks with {} workers".format(
-        _stamp(), len(jobs), workers), flush=True)
+            if (run_dir(n, s) / "last.pt").exists()
+            and not _result_path(n, s, t, city).exists()]
+    print("{} evaluating {} (model, seed) cells on {} blocks with {} workers".format(
+        _stamp(), len(jobs), city, workers), flush=True)
 
     def one(job):
         n, s, t = job
         cmd = [sys.executable, "-m", "ig3d.lidar", "eval-one", "--name", n, "--seed", str(s),
-               "--sentences", t]
-        return _run(cmd, OUT / "logs" / "{}_{}_s{}.log".format(t, n, s),
-                    "austin {} seed {} {}".format(n, s, t))
+               "--sentences", t, "--city", city]
+        return _run(cmd, out_dir(city) / "logs" / "{}_{}_s{}.log".format(t, n, s),
+                    "{} {} seed {} {}".format(city, n, s, t))
 
     with ThreadPoolExecutor(workers) as ex:
         rcs = list(ex.map(one, jobs))
-    print("{} AUSTIN_EVAL_DONE failures={}".format(_stamp(), sum(r != 0 for r in rcs)), flush=True)
+    print("{} LIDAR_EVAL_DONE city={} failures={}".format(
+        _stamp(), city, sum(r != 0 for r in rcs)), flush=True)
 
 
 def _informative(data):
@@ -216,10 +269,10 @@ def _subset(data, keep):
             for n, by in data.items()}
 
 
-def _report_lines(data, ms, title, sentences):
+def _report_lines(data, ms, title, sentences, city="austin"):
     from .multiseed import comparison, matrix, stats
-    lines = ["## Austin LiDAR, {} phrasings, {} — grid regret %, mean ± sd over seeds "
-             "[95% CI over blocks]".format(sentences, title), "",
+    lines = ["## {} LiDAR, {} phrasings, {} — grid regret %, mean ± sd over seeds "
+             "[95% CI over blocks]".format(city.replace("_", " ").title(), sentences, title), "",
              "| class | " + " | ".join(ms) + " |", "|---|" + "---|" * len(ms)]
     for cls in list(REAL_CLASSES) + ["MEAN"]:
         cl = list(REAL_CLASSES) if cls == "MEAN" else [cls]
@@ -234,7 +287,11 @@ def _report_lines(data, ms, title, sentences):
               ("K=2 vs K=3 on tier 3", "k2_onehot", "k3_onehot", ["climb_open", "descend_open"]),
               ("NLI − one-hot (language gap)", "k3_nli", "k3_onehot", list(REAL_CLASSES)),
               ("embedding − NLI", "k3_embedding", "k3_nli", list(REAL_CLASSES)),
-              ("adapter − NLI", "k3_nli_adapter", "k3_nli", list(REAL_CLASSES))]
+              ("adapter − NLI", "k3_nli_adapter", "k3_nli", list(REAL_CLASSES)),
+              ("real-trained − synthetic-only, one-hot", "k3_onehot_real", "k3_onehot",
+               list(REAL_CLASSES)),
+              ("real-trained − synthetic-only, NLI + adapter", "k3_nli_adapter_real",
+               "k3_nli_adapter", list(REAL_CLASSES))]
     lines += ["", "| comparison (A − B, points) | A − B | holds in |", "|---|---|---|"]
     for name, a, b, cl in claims:
         if a in data and b in data:
@@ -245,25 +302,25 @@ def _report_lines(data, ms, title, sentences):
     return lines
 
 
-def report(sentences="held"):
+def report(sentences="held", city="austin"):
     from .multiseed import MODELS
     data = {}
-    for f in sorted(OUT.glob("e1_{}_*_s*.json".format(sentences))):
+    for f in sorted(out_dir(city).glob("e1_{}_*_s*.json".format(sentences))):
         d = json.loads(f.read_text())
         data.setdefault(d["name"], {})[d["seed"]] = d["rows"]
     if not data:
-        raise SystemExit("no Austin results for {} phrasings yet".format(sentences))
+        raise SystemExit("no {} results for {} phrasings yet".format(city, sentences))
     ms = [n for n in MODELS if n in data]
     blocks = {r["vol"] for r in next(iter(data[ms[0]].values()))}
     keep = _informative(data)
-    lines = _report_lines(data, ms, "all {} blocks".format(len(blocks)), sentences)
+    lines = _report_lines(data, ms, "all {} blocks".format(len(blocks)), sentences, city)
     if len(keep) >= 2:
         lines += [""] + _report_lines(
             _subset(data, keep), ms,
             "the {} blocks where the shortest path climbs (declared secondary analysis)".format(len(keep)),
-            sentences)
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            sentences, city)
+    out_dir(city).mkdir(parents=True, exist_ok=True)
+    (out_dir(city) / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
 
 
@@ -475,7 +532,9 @@ def main(argv=None):
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--name")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--sentences", default="held", choices=["held", "train"])
+    ap.add_argument("--sentences", default="held", choices=["held", "train", "hard"])
+    ap.add_argument("--city", default="austin",
+                    help="austin (the paper's tile) or any city built with ig3d.cities")
     a = ap.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")
     warnings.filterwarnings("ignore", message="Mean of empty slice")
@@ -496,17 +555,17 @@ def main(argv=None):
             np.median([b["relief_m"] for b in used]), max(b["relief_m"] for b in used),
             np.median([b["solid_frac"] for b in used])))
     elif a.what == "ladder":
-        rows = ladder(load_blocks())
-        OUT.mkdir(parents=True, exist_ok=True)
-        (OUT / "ladder.json").write_text(json.dumps(rows, default=float))
+        rows = ladder(load_blocks(city=a.city))
+        out_dir(a.city).mkdir(parents=True, exist_ok=True)
+        (out_dir(a.city) / "ladder.json").write_text(json.dumps(rows, default=float))
         _print_ladder(rows)
     elif a.what == "eval":
         from .multiseed import MODELS
-        evaluate(a.models or list(MODELS), a.seeds, a.workers, (a.sentences,))
+        evaluate(a.models or list(MODELS), a.seeds, a.workers, (a.sentences,), a.city)
     elif a.what == "eval-one":
-        eval_one(a.name, a.seed, a.sentences)
+        eval_one(a.name, a.seed, a.sentences, a.city)
     else:
-        report(a.sentences)
+        report(a.sentences, a.city)
 
 
 if __name__ == "__main__":

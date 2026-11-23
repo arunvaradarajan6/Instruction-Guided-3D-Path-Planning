@@ -98,18 +98,18 @@ def e1_learned(ckpts: dict, n: int = 40, sentences: str = "held", use_prm: bool 
         k = meta["k"]
         ccfg = CostConfig(**meta["config"]["cost"])
         feats = _feats(vols, ccfg)
-        table = np.asarray(meta["cond_table"], np.float32)
-        pool = np.asarray(meta["held_sent"] if sentences == "held" else meta["train_sent"])
+        from .encoder import sentence_pool
+        pool_vec, pool_lab, _ = sentence_pool(meta, sentences)
         rng = np.random.default_rng(seed)
         rows, diag = [], {a + "/" + b: [] for a, b, _ in PAIRS}
         for vi, (v, G, f) in enumerate(zip(vols, graphs, feats)):
             bu = behaviour(v, G.plan(_uniform_field(v, ccfg), v.start, v.goal)[0], f["edt"])
             preds = {}
             for ci, cls in enumerate(CLASSES):
-                si = int(rng.choice(pool[ALL_LABELS[pool] == ci]))
+                si = int(rng.choice(np.flatnonzero(pool_lab == ci)))
                 truth = gt_field_from_features(v.occ, f, cls, ccfg, 3)
                 p_opt, c_opt = G.plan(truth, v.start, v.goal)
-                pred = predict(model, v.occ, table[si], ccfg, dev)
+                pred = predict(model, v.occ, pool_vec[si], ccfg, dev)
                 preds[cls] = pred
                 pg, _ = G.plan(pred, v.start, v.goal)
                 bp, bo = behaviour(v, pg, f["edt"]), behaviour(v, p_opt, f["edt"])
@@ -337,6 +337,21 @@ def e3_conditioning(seeds=range(5)) -> dict:
         e, q = probe(raw, (a, b)), probe(nli, (a, b))
         res["pairs"][a + "/" + b] = dict(embedding=e, nli=q)
         print("  {:>10s} vs {:<13s} (chance 0.50): embedding {:.3f}   nli {:.3f}".format(a, b, e, q))
+    from .encoder import cached_text_encoding
+    from .instructions import HARD_LABELS, HARD_SENTENCES
+    from .instructions import split_indices as _split
+    emb_enc = EmbeddingEncoder(DEFAULT.model.encoder_model, _split(seed=0)[0])
+    raw_hard = cached_text_encoding(_RawEmbedding(emb_enc), HARD_SENTENCES, "hard_raw")
+    nli_hard = cached_text_encoding(nli_enc, HARD_SENTENCES, "hard")
+
+    def probe_hard(X, Xh):
+        tr = np.arange(len(ALL_LABELS))
+        clf = LogisticRegression(max_iter=5000).fit(X[tr], ALL_LABELS[tr])
+        return float(clf.score(Xh, HARD_LABELS))
+
+    res["hard8"] = dict(embedding=probe_hard(raw, raw_hard), nli=probe_hard(nli, nli_hard))
+    print("  HARD test set, trained on every corpus sentence (chance 0.125): embedding {:.3f}"
+          "   nli {:.3f}".format(res["hard8"]["embedding"], res["hard8"]["nli"]))
     leak = {c: nli_coef[ALL_LABELS == i].mean(0).tolist() for i, c in enumerate(CLASSES)}
     res["nli_mean_coef"] = dict(axes=list(NLI_AXES), per_class=leak)
     print("  mean NLI coefficient (rows: class, cols: " + ", ".join(NLI_AXES) + ")")
@@ -345,12 +360,27 @@ def e3_conditioning(seeds=range(5)) -> dict:
     return res
 
 
+class _RawEmbedding:
+    """Un-projected sentence embeddings, so the E3 probe sees what the PCA sees."""
+
+    def __init__(self, emb_enc):
+        self.model_name = emb_enc.model_name
+        self._e = emb_enc
+
+    def encode_text(self, sentences):
+        from sentence_transformers import SentenceTransformer
+        if self._e._enc is None:
+            self._e._enc = SentenceTransformer(self.model_name)
+        return self._e._enc.encode(list(sentences), normalize_embeddings=True,
+                                   convert_to_numpy=True, show_progress_bar=False)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("exp", choices=["e0", "e1", "e2", "e3", "sweep"])
     ap.add_argument("--n", type=int, default=None)
     ap.add_argument("--ckpt", action="append", default=[], help="name=path/to/best.pt")
-    ap.add_argument("--sentences", default="held", choices=["held", "train"])
+    ap.add_argument("--sentences", default="held", choices=["held", "train", "hard"])
     ap.add_argument("--no-prm", action="store_true")
     ap.add_argument("--out", default=str(RESULTS))
     a = ap.parse_args(argv)
