@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import ConcatDataset, DataLoader
+from torch.utils.data import ConcatDataset, DataLoader, Sampler
 
 from .config import DEFAULT, Config
 from .costfield import denormalise
@@ -23,6 +23,29 @@ from .unet3d import CostNet
 
 from .paths import MODELS
 TRAIN_SEED, VAL_SEED = 1000, 2000
+
+
+class MixSampler(Sampler):
+    """Every synthetic sample plus n_real_epoch real ones per epoch, shuffled together.
+
+    The real ones are a fresh random subset each epoch (with replacement only if there are
+    fewer real samples than asked for), so the real share is exact and the epoch length does
+    not grow with the number of LiDAR blocks."""
+
+    def __init__(self, n_syn: int, n_real: int, n_real_epoch: int, seed: int = 0):
+        self.n_syn, self.n_real, self.k = n_syn, n_real, n_real_epoch
+        self.seed, self.epoch = seed, 0
+
+    def __len__(self):
+        return self.n_syn + self.k
+
+    def __iter__(self):
+        rng = np.random.default_rng((self.seed, self.epoch))
+        self.epoch += 1
+        real = self.n_syn + rng.choice(self.n_real, size=self.k, replace=self.k > self.n_real)
+        idx = np.concatenate([np.arange(self.n_syn), real])
+        rng.shuffle(idx)
+        return iter(idx.tolist())
 
 
 def make_config(args) -> Config:
@@ -121,16 +144,21 @@ def main(argv=None):
         from .lidar import REAL_CLASSES
         real_ids = [CLASSES.index(c) for c in REAL_CLASSES]
         real_sent = train_sent[np.isin(ALL_LABELS[train_sent], real_ids)]
-        want = a.real_frac / max(1e-6, 1 - a.real_frac) * len(ds_tr)
+        want = int(round(a.real_frac / max(1e-6, 1 - a.real_frac) * len(ds_tr)))
         spv = max(1, int(np.ceil(want / len(bank_re))))
         parts.append(FieldDataset(bank_re, real_sent, enc.table, a.k, cfg.cost, spv,
                                   seed=a.seed + 7))
-        print("real blocks: {} from {} (x{} per epoch, {:.0%} of samples)".format(
-            len(bank_re), ", ".join(real_cities), spv,
-            len(parts[1]) / (len(parts[0]) + len(parts[1]))), flush=True)
+        print("real blocks: {} from {} ({} real samples per epoch, {:.0%} of samples)".format(
+            len(bank_re), ", ".join(real_cities), want, want / (len(ds_tr) + want)), flush=True)
     ds_va = FieldDataset(bank_va, held_sent, enc.table, a.k, cfg.cost, 2, seed=a.seed + 99)
     pin = dev.type == "cuda"
-    dl_tr = DataLoader(ConcatDataset(parts), batch_size=a.batch, shuffle=True, num_workers=0, pin_memory=pin)
+    if len(parts) > 1:
+        # exactly real_frac of every epoch, a fresh subset of the real blocks each time
+        sampler = MixSampler(len(parts[0]), len(parts[1]), want, seed=a.seed)
+        dl_tr = DataLoader(ConcatDataset(parts), batch_size=a.batch, sampler=sampler,
+                           num_workers=0, pin_memory=pin)
+    else:
+        dl_tr = DataLoader(ds_tr, batch_size=a.batch, shuffle=True, num_workers=0, pin_memory=pin)
     dl_va = DataLoader(ds_va, batch_size=a.batch, shuffle=False, num_workers=0, pin_memory=pin)
 
     model = CostNet(enc.dim, a.k, base=a.base, depth=cfg.model.depth, adapter=a.adapter)
