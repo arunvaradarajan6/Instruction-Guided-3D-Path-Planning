@@ -68,7 +68,12 @@ def analyse(mission_dir) -> dict:
     goal_enu = np.array([(m["goal"][2] + .5) * s, (m["goal"][1] + .5) * s, (m["goal"][0] + .5) * s])
     d_goal = np.linalg.norm(pos - goal_enu, axis=1)
     reached = bool(d_goal.min() <= max(1.0, 0.75 * s))
-    c_fly = clr(pv[flight["phase"] >= 1]) if (flight["phase"] >= 1).any() else np.array([np.inf])
+    # Count contact only once airborne: the hover phase starts on the reference clock, so its
+    # first samples can still find the drone standing on its launch surface.
+    c_all = clr(pv)
+    airborne = np.maximum.accumulate(c_all > m["limits"]["robot_radius"])
+    fly = (flight["phase"] >= 1) & airborne
+    c_fly = c_all[fly] if fly.any() else np.array([np.inf])
     min_clear = float(c_fly.min())
     collided = bool(min_clear < m["limits"]["robot_radius"] * 0.5)
     out.update(reached_goal=reached, completed=finfo["completed"], crashed=finfo["crashed"],

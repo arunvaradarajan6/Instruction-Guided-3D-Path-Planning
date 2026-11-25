@@ -53,7 +53,7 @@ src/
     experiments.py    experiments that need no training (E0, E2, E3, sweep) and evaluation (E1)
     multiseed.py      training and evaluating every model over three seeds
     lidar.py          USGS 3DEP aerial LiDAR as 48³ voxel blocks (Austin, and any city below)
-    cities.py         more LiDAR: 11 training cities, Seattle and Miami held out with Austin
+    cities.py         more LiDAR (3DEP, AWS copy): 11 training cities, Seattle and Miami held out with Austin
     sim/              planned path -> flyable trajectory -> Gazebo + PX4 SITL flight -> flown regret
     paperfigs.py      every figure in the paper
     viz.py            extra plots and a free-text demo

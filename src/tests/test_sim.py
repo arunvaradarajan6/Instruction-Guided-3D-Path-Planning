@@ -93,3 +93,13 @@ def test_clearance_is_zero_on_faces():
     c = Clearance(occ, 1.0)
     assert c([[2, 2, 2]])[0] < 0
     assert abs(c([[2, 2, 2.5]])[0]) < 1e-6
+
+
+def test_ept_node_bounds_tile_the_root_cube():
+    from ig3d.cities import _overlaps, node_bounds, utm_epsg
+    cube = [0.0, 0.0, 0.0, 8.0, 8.0, 8.0]
+    assert node_bounds(cube, "0-0-0-0") == (0.0, 0.0, 8.0, 8.0)
+    assert node_bounds(cube, "2-3-1-0") == (6.0, 2.0, 8.0, 4.0)
+    assert _overlaps(node_bounds(cube, "1-1-1-0"), (5.0, 5.0, 6.0, 6.0))
+    assert not _overlaps(node_bounds(cube, "1-0-0-0"), (5.0, 5.0, 6.0, 6.0))
+    assert utm_epsg(-122.33, 47.6) == 32610 and utm_epsg(-80.19, 25.76) == 32617

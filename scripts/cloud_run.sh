@@ -107,7 +107,8 @@ install_px4() {
 
 build_px4() {
   cd "$PX4_DIR"
-  DONT_RUN=1 make px4_sitl gz_x500
+  # build only: `make px4_sitl gz_x500` would also start the simulator and never return
+  make px4_sitl
   test -x build/px4_sitl_default/bin/px4
 }
 
@@ -130,9 +131,8 @@ language_models() {
 }
 
 lidar_download() {
-  cd "$SRC" && py -m ig3d.cities download --cities all
-  # rate-limited tiles get SKIPPED; one more pass picks them up
-  sleep 120 && py -m ig3d.cities download --cities all
+  # the AWS Open Data copy of 3DEP; rockyweb.usgs.gov (`download`) throttles to ~50 KB/s
+  cd "$SRC" && py -m ig3d.cities fetch-aws --cities all
 }
 
 lidar_build() {
@@ -150,7 +150,7 @@ sim_smoke() {
   local d="$REPO/datasets/sim/smoke"
   rm -rf "$d"
   py -m ig3d.sim.run mission --source seattle_downtown --index 0 --model oracle --cls level --out "$d"
-  timeout 900 py -m ig3d.sim.run fly "$d"
+  timeout 900 "$VENV/bin/python" -m ig3d.sim.run fly "$d"   # timeout cannot run the py function
   py -m ig3d.sim.run analyse "$d" | tee "$d/analyse.out"
   py - "$d" <<'EOF'
 import json, sys

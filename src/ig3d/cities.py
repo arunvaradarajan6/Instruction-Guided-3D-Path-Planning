@@ -1,9 +1,16 @@
 """More real environments: USGS 3DEP aerial LiDAR from many US cities.
 
-    python -m ig3d.cities search                 # find tiles per city, write a manifest
-    python -m ig3d.cities download               # fetch them (resumable)
+    python -m ig3d.cities fetch-aws              # cut each city out of the AWS copy (fast)
+    python -m ig3d.cities search                 # or: find USGS tiles per city, write a manifest
+    python -m ig3d.cities download               #     and fetch them (resumable; rate-limited)
     python -m ig3d.cities build                  # voxelise into 48^3 blocks
     python -m ig3d.cities summary                # blocks per city and split
+
+Two sources of the same USGS 3DEP point clouds. `fetch-aws` reads the public AWS Open Data
+copy (s3://usgs-lidar-public, Entwine Point Tile format), cuts a box around each city,
+reprojects it to UTM metres and writes one LAZ per city into <city>/ept/. `download` fetches
+whole tiles from rockyweb.usgs.gov into <city>/laz/, which throttles heavily (HTTP 429, about
+50 KB/s). `build` uses <city>/ept/ when it exists, else <city>/laz/.
 
 Split. Whole cities are held out, never tiles of a training city, so every number on a
 held-out city is a cross-city result. Austin (the paper's tile) stays held out. The
@@ -51,6 +58,26 @@ CITIES = {
     "seattle_downtown":  ((-122.342, 47.603, -122.328, 47.613), "heldout", "urban"),
     "miami_brickell":    ((-80.198, 25.758, -80.188, 25.768), "heldout", "urban"),
 }
+# The 3DEP project in the AWS copy covering each box: the manifest's survey where AWS has it,
+# else the newest one covering the whole box (Houston, Portland, Miami).
+AWS_PROJECTS = {
+    "nyc_midtown": "NY_NewYorkCity",
+    "chicago_loop": "USGS_LPC_IL_4County_Cook_2017_LAS_2019",
+    "sf_downtown": "CA_SanFrancisco_1_B23",
+    "boston_downtown": "MA_CentralEastern_1_2021",
+    "denver_downtown": "CO_DRCOG_2_2020",
+    "atlanta_midtown": "GA_Statewide_B2_2018",
+    "dc_downtown": "USGS_LPC_MD_VA_Sandy_NCR_2014_LAS_2015",
+    "houston_downtown": "TX_Coastal_B1_2018",
+    "la_downtown": "CA_LosAngeles_1_B23",
+    "portland_forest": "OR_OLCMetro_2019",
+    "phoenix_suburb": "AZ_MaricopaPinal_1_2020",
+    "seattle_downtown": "WA_KingCo_1_2021",
+    "miami_brickell": "FL_TopobathyFLKeysNOAA_Hydroflattened_2019",
+}
+AWS_ROOT = "https://s3-us-west-2.amazonaws.com/usgs-lidar-public"
+# Each box is padded so a city gives about as much area as three USGS tiles.
+AWS_PAD_M = 700.0
 # Austin is the paper's tile, already in datasets/cache/lidar, and is also held out.
 HELDOUT = tuple(["austin"] + [c for c, v in CITIES.items() if v[1] == "heldout"])
 TRAIN = tuple(c for c, v in CITIES.items() if v[1] == "train")
@@ -207,13 +234,178 @@ def download(cities):
             time.sleep(3)
 
 
+# ---------------------------------------------------------------------- AWS (EPT) source
+
+def _get(url: str, retries: int = 6) -> bytes:
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "ig3d-lidar/1.0"})
+            with urllib.request.urlopen(req, timeout=120) as r:
+                return r.read()
+        except Exception as e:  # noqa: BLE001
+            if attempt == retries - 1:
+                raise
+            time.sleep(_wait_s(e, attempt))
+
+
+def node_bounds(cube, key: str):
+    """(xmin, ymin, xmax, ymax) of EPT node 'D-X-Y-Z' inside the root cube [x0,y0,z0,x1,y1,z1]."""
+    d, x, y, _ = (int(v) for v in key.split("-"))
+    sx, sy = (cube[3] - cube[0]) / 2 ** d, (cube[4] - cube[1]) / 2 ** d
+    return cube[0] + x * sx, cube[1] + y * sy, cube[0] + (x + 1) * sx, cube[1] + (y + 1) * sy
+
+
+def _overlaps(a, b) -> bool:
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+def ept_nodes(base: str, cube, box):
+    """Keys and point counts of every EPT node overlapping box (in the EPT's CRS)."""
+    out, todo = [], ["0-0-0-0"]
+    while todo:
+        h = json.loads(_get("{}/ept-hierarchy/{}.json".format(base, todo.pop())))
+        for k, n in h.items():
+            if not _overlaps(node_bounds(cube, k), box):
+                continue
+            if n == -1:
+                todo.append(k)
+            elif n > 0:
+                out.append((k, n))
+    return out
+
+
+def utm_epsg(lon: float, lat: float) -> int:
+    return (32600 if lat >= 0 else 32700) + int((lon + 180) // 6) + 1
+
+
+def aws_box(city: str, pad_m: float = AWS_PAD_M):
+    """(epsg, [xmin, ymin, xmax, ymax]) of the city's padded box in UTM metres."""
+    from pyproj import Transformer
+    b = CITIES[city][0]
+    epsg = utm_epsg(0.5 * (b[0] + b[2]), 0.5 * (b[1] + b[3]))
+    t = Transformer.from_crs(4326, epsg, always_xy=True)
+    xs, ys = t.transform([b[0], b[2], b[0], b[2]], [b[1], b[1], b[3], b[3]])
+    return epsg, [min(xs) - pad_m, min(ys) - pad_m, max(xs) + pad_m, max(ys) + pad_m]
+
+
+def _vertical_scale(srs: dict) -> float:
+    """Metres per z unit of an EPT; some 3DEP projects keep z in US survey feet."""
+    v = str(srs.get("vertical") or "")
+    wkt = str(srs.get("wkt") or "")
+    if v in ("6360", "8228") or ("VERT_CS" in wkt and "foot" in wkt.split("VERT_CS", 1)[1].lower()):
+        return 0.3048006096
+    return 1.0
+
+
+def fetch_aws_city(city: str, pad_m: float = AWS_PAD_M, workers: int = 32):
+    """Cut the city's padded box out of its AWS EPT and write <city>/ept/<project>.laz in UTM."""
+    import io
+    from concurrent.futures import ThreadPoolExecutor
+
+    import laspy
+    from pyproj import CRS, Transformer
+
+    project = AWS_PROJECTS[city]
+    dest = city_dir(city) / "ept" / (project + ".laz")
+    if dest.exists():
+        print("{:18s} {} already fetched".format(city, dest.name))
+        return dest
+    base = "{}/{}".format(AWS_ROOT, project)
+    info = json.loads(_get(base + "/ept.json"))
+    if info.get("dataType") != "laszip":
+        raise SystemExit("{}: EPT dataType {!r} not supported".format(project, info.get("dataType")))
+    src = int(info["srs"]["horizontal"])
+    zs = _vertical_scale(info["srs"])
+    epsg, box = aws_box(city, pad_m)
+    to_src = Transformer.from_crs(epsg, src, always_xy=True)
+    to_utm = Transformer.from_crs(src, epsg, always_xy=True)
+    # query box in the EPT's CRS: the UTM box's edges, densified, then their envelope
+    e = np.linspace(0, 1, 21)
+    ex = np.r_[box[0] + e * (box[2] - box[0]), np.full(21, box[2]),
+               box[2] - e * (box[2] - box[0]), np.full(21, box[0])]
+    ey = np.r_[np.full(21, box[1]), box[1] + e * (box[3] - box[1]),
+               np.full(21, box[3]), box[3] - e * (box[3] - box[1])]
+    qx, qy = to_src.transform(ex, ey)
+    q = (float(np.min(qx)), float(np.min(qy)), float(np.max(qx)), float(np.max(qy)))
+    nodes = ept_nodes(base, info["bounds"], q)
+    print("{:18s} {}: {} nodes, <= {:.1f} M points, EPSG:{} -> EPSG:{}, z scale {:g}".format(
+        city, project, len(nodes), sum(n for _, n in nodes) / 1e6, src, epsg, zs), flush=True)
+
+    def read(key):
+        las = laspy.read(io.BytesIO(_get("{}/ept-data/{}.laz".format(base, key))))
+        x, y = to_utm.transform(np.asarray(las.x), np.asarray(las.y))
+        x, y = np.asarray(x), np.asarray(y)
+        m = (x >= box[0]) & (x < box[2]) & (y >= box[1]) & (y < box[3])
+        return (x[m], y[m], np.asarray(las.z)[m] * zs, np.asarray(las.classification)[m],
+                len(las.points))
+
+    parts, t0, done = [], time.time(), 0
+    with ThreadPoolExecutor(workers) as ex_:
+        for r in ex_.map(read, [k for k, _ in nodes]):
+            parts.append(r[:4])
+            done += 1
+            if done % 500 == 0 or done == len(nodes):
+                print("  {}/{} nodes, {:.0f} s".format(done, len(nodes), time.time() - t0),
+                      flush=True)
+    x, y, z, cls = (np.concatenate([p[i] for p in parts]) for i in range(4))
+    if not len(x):
+        print("{:18s} no points in the box".format(city))
+        return None
+    hdr = laspy.LasHeader(point_format=6, version="1.4")
+    hdr.scales = np.array([0.01, 0.01, 0.01])
+    hdr.offsets = np.array([np.floor(x.min()), np.floor(y.min()), np.floor(z.min())])
+    hdr.add_crs(CRS.from_epsg(epsg))
+    las = laspy.LasData(hdr)
+    las.x, las.y, las.z = x, y, z
+    las.classification = cls.astype(np.uint8)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part = dest.with_suffix(".laz.part")
+    # given a path, laspy picks compression from its suffix ('.part' is not '.laz'), so pass a stream
+    with open(part, "wb") as fh:
+        las.write(fh, do_compress=True, laz_backend=laspy.LazBackend.Lazrs)
+    part.rename(dest)
+    manifest_path = ROOT / "manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    manifest.setdefault(city, dict(bbox=CITIES[city][0], split=CITIES[city][1],
+                                   kind=CITIES[city][2], tiles=[]))
+    manifest[city]["aws"] = dict(project=project, url=base + "/ept.json", epsg=epsg,
+                                 box_utm=[round(v, 2) for v in box], pad_m=pad_m,
+                                 points=int(len(x)), z_scale=zs)
+    manifest_path.write_text(json.dumps(manifest, indent=1))
+    print("{:18s} -> {:.1f} M points, {:.0f} MB in {:.0f} s".format(
+        city, len(x) / 1e6, dest.stat().st_size / 1e6, time.time() - t0), flush=True)
+    return dest
+
+
+def fetch_aws(cities, pad_m: float = AWS_PAD_M):
+    for c in cities:
+        if c == "austin":
+            continue
+        if c not in AWS_PROJECTS:
+            print("{}: no AWS project; use `download`".format(c))
+            continue
+        try:
+            fetch_aws_city(c, pad_m)
+        except Exception as e:  # noqa: BLE001
+            print("{:18s} FAILED: {}".format(c, e), flush=True)
+
+
 # ------------------------------------------------------------------------------- build
+
+def city_tiles(city: str) -> list[Path]:
+    """The city's LAZ files: the AWS cut if fetched, else the USGS tiles."""
+    for sub in ("ept", "laz"):
+        tiles = sorted((city_dir(city) / sub).glob("*.laz"))
+        if tiles:
+            return tiles
+    return []
+
 
 def build(cities, voxel_m=VOXEL_M, seed=0):
     for c in cities:
         if c == "austin":
             continue
-        tiles = sorted((city_dir(c) / "laz").glob("*.laz"))
+        tiles = city_tiles(c)
         if not tiles:
             print("{}: no tiles downloaded".format(c))
             continue
@@ -276,14 +468,17 @@ def summary():
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["search", "download", "build", "summary"])
+    ap.add_argument("what", choices=["fetch-aws", "search", "download", "build", "summary"])
     ap.add_argument("--cities", nargs="*", default=["all"],
                     help="names, or the aliases train / heldout / all")
     ap.add_argument("--max-tiles", type=int, default=3, help="tiles per city (search)")
+    ap.add_argument("--pad-m", type=float, default=AWS_PAD_M, help="box padding (fetch-aws)")
     a = ap.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")
     cities = resolve(a.cities)
-    if a.what == "search":
+    if a.what == "fetch-aws":
+        fetch_aws(cities, a.pad_m)
+    elif a.what == "search":
         search(cities, a.max_tiles)
     elif a.what == "download":
         download(cities)
