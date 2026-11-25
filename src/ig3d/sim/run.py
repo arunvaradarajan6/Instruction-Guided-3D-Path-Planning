@@ -64,6 +64,27 @@ def _n_blocks(source):
     return len(load_blocks(city=source))
 
 
+def climbing(sources) -> list[str]:
+    """'city:index' of every block whose true shortest path climbs at least once.
+
+    The same test as the ladder's informative subset (`lidar._informative`): only on these
+    blocks can a level instruction cost K=1 anything, so a level flight test needs them."""
+    from ..config import DEFAULT
+    from ..costfield import gt_field_from_features, volume_features
+    from ..planner_grid import GridGraph
+    from .mission import load_volume
+    out = []
+    for src in _sources(sources):
+        for i in range(_n_blocks(src)):
+            vol, _ = load_volume(src, i)
+            f = gt_field_from_features(vol.occ, volume_features(vol, DEFAULT.cost), "shortest",
+                                       DEFAULT.cost, 3)
+            path, _ = GridGraph(vol.occ).plan(f, vol.start, vol.goal)
+            if path is not None and np.any(np.diff(np.asarray(path)[:, 0]) > 0):
+                out.append("{}:{}".format(src, i))
+    return out
+
+
 def batch(a):
     from .analyse import analyse
     from .mission import build_mission
@@ -71,10 +92,17 @@ def batch(a):
     run.mkdir(parents=True, exist_ok=True)
     (run / "config.json").write_text(json.dumps(vars(a), indent=1, default=str))
     jobs = []
-    for src in _sources(a.sources):
-        n = min(a.n, _n_blocks(src))
-        idx = np.random.default_rng(a.seed).permutation(_n_blocks(src))[:n] if src != "synthetic" \
-            else np.arange(n)
+    picks = {}
+    if a.blocks:  # explicit "city:index" list, e.g. from `run.py climbing`
+        for b in a.blocks:
+            src, i = b.rsplit(":", 1)
+            picks.setdefault(src, []).append(int(i))
+    else:
+        for src in _sources(a.sources):
+            n = min(a.n, _n_blocks(src))
+            picks[src] = np.random.default_rng(a.seed).permutation(_n_blocks(src))[:n] \
+                if src != "synthetic" else np.arange(n)
+    for src, idx in picks.items():
         for i in sorted(int(v) for v in idx):
             for model in a.models:
                 for cls in (a.classes or _classes_for(src)):
@@ -215,6 +243,7 @@ def main(argv=None):
     p.add_argument("--px4-dir")
     p.add_argument("--port", type=int, default=14540)
     p.add_argument("--seed", type=int, default=0, help="which blocks are picked")
+    p.add_argument("--blocks", nargs="*", help="explicit city:index blocks instead of --sources/--n")
     p.add_argument("--flight-timeout", type=float, default=900)
     lim_args(p)
     wind_args(p)
@@ -222,8 +251,14 @@ def main(argv=None):
     p = sub.add_parser("report")
     p.add_argument("--run", required=True)
 
+    p = sub.add_parser("climbing", help="list blocks whose true shortest path climbs (city:index)")
+    p.add_argument("--sources", nargs="+", default=["heldout"])
+
     a = ap.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")
+    if a.cmd == "climbing":
+        print(" ".join(climbing(a.sources)))
+        return
     if a.cmd == "mission":
         from .mission import build_mission
         m = build_mission(a.out, a.source, a.index, a.model, a.cls, a.text, a.sentences,
