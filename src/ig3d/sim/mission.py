@@ -94,6 +94,7 @@ def build_mission(out_dir, source: str, index: int, model: str = "oracle", cls: 
         raise RuntimeError("no path from start to goal")
     opt_path = G.plan(truth, vol.start, vol.goal)[0] if truth is not None else None
 
+    lim = lim.for_voxel(s)
     sc, sm, cruise_enu, info = make_flyable(path, plan_field, vol.occ, s, lim)
     clr = info.pop("clr")
     g = ground_below(vol.occ, vol.start)

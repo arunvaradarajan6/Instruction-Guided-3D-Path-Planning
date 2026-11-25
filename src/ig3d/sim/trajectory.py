@@ -12,7 +12,7 @@
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 import numpy as np
 from scipy.ndimage import maximum_filter1d
@@ -38,6 +38,15 @@ class Limits:
     @property
     def r_safe(self) -> float:
         return self.robot_radius + self.margin
+
+    def for_voxel(self, voxel_m: float, frac: float = 0.45) -> "Limits":
+        """Clearance scaled to the grid: at least frac * voxel_m (1.8 m on 4 m city voxels).
+
+        Grid paths keep half a voxel of clearance, so this still allows shortcuts, but stops
+        smoothing from cutting to within r_safe of a roof edge, which an x500 tracking about
+        1 m off at city speeds then clips. On 1 m grids it changes nothing (0.45 m)."""
+        r = max(self.r_safe, frac * voxel_m)
+        return replace(self, margin=r - self.robot_radius)
 
     def as_dict(self):
         return asdict(self)

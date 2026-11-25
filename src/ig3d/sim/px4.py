@@ -42,9 +42,15 @@ def px4_dir(arg=None) -> Path:
 
 
 def _kill_stale(world_name):
-    for pat in ("gz sim.*{}.sdf".format(world_name), "build/px4_sitl_default/bin/px4"):
-        subprocess.run(["pkill", "-f", pat], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(1.0)
+    """Clear what a killed flight leaves behind: gz sim can ignore SIGTERM, and an orphaned
+    mavsdk_server keeps UDP 14540 bound, which fails every later flight with a bind error."""
+    pats = ("gz sim.*{}.sdf".format(world_name), "build/px4_sitl_default/bin/px4",
+            "mavsdk/bin/mavsdk_server")
+    for sig in ("-TERM", "-KILL"):
+        for pat in pats:
+            subprocess.run(["pkill", sig, "-f", pat], stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+        time.sleep(1.0)
 
 
 def launch(px4: Path, mission: dict, log_path: Path, gui: bool = False):
@@ -52,7 +58,30 @@ def launch(px4: Path, mission: dict, log_path: Path, gui: bool = False):
     world_name = mission["world_name"]
     _kill_stale(world_name)
     worlds = px4 / "Tools" / "simulation" / "gz" / "worlds"
-    shutil.copy(mission["world"], worlds / (world_name + ".sdf"))
+    world_sdf = worlds / (world_name + ".sdf")
+    shutil.copy(mission["world"], world_sdf)
+    # Start Gazebo ourselves and wait for its spawn service. PX4's startup script would start
+    # it too, but then asks to spawn the drone once, after ~1 s: a city world with hundreds of
+    # boxes is not loaded by then and PX4 gives up. Finding a running world, it attaches.
+    models = px4 / "Tools" / "simulation" / "gz" / "models"
+    gz_env = dict(os.environ, GZ_SIM_RESOURCE_PATH=":".join(
+        p for p in (os.environ.get("GZ_SIM_RESOURCE_PATH", ""), str(models), str(worlds)) if p))
+    gz_log = open(log_path.with_name("gz.log"), "w")
+    subprocess.Popen(["gz", "sim", "--verbose=1", "-r", "-s", str(world_sdf)], env=gz_env,
+                     stdout=gz_log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                     start_new_session=True)
+    t0 = time.monotonic()
+    want = "/world/{}/create".format(world_name)
+    while time.monotonic() - t0 < 180:
+        out = subprocess.run(["gz", "service", "-l"], capture_output=True, text=True,
+                             timeout=30).stdout
+        if want in out.split():
+            break
+        time.sleep(1.0)
+    time.sleep(2.0)
+    if gui:
+        subprocess.Popen(["gz", "sim", "-g"], env=gz_env, stdout=gz_log, stderr=subprocess.STDOUT,
+                         stdin=subprocess.DEVNULL, start_new_session=True)
     e, n, u = mission["spawn_enu"]
     env = dict(os.environ, PX4_SYS_AUTOSTART="4001", PX4_SIM_MODEL="gz_x500",
                PX4_GZ_WORLD=world_name, PX4_GZ_MODEL_POSE="{:.3f},{:.3f},{:.3f},0,0,0".format(
@@ -132,9 +161,13 @@ async def fly_async(mission_dir, port=14540, wind=None, health_timeout=180.0,
     drone = System()
     await drone.connect(system_address="udp://:{}".format(port))
     t0 = time.monotonic()
-    async for st in drone.core.connection_state():
-        if st.is_connected:
-            break
+
+    async def connected():
+        async for st in drone.core.connection_state():
+            if st.is_connected:
+                return
+
+    await asyncio.wait_for(connected(), timeout=120.0)
     async for h in drone.telemetry.health():
         if h.is_local_position_ok and h.is_global_position_ok and h.is_home_position_ok:
             break
@@ -201,7 +234,8 @@ async def fly_async(mission_dir, port=14540, wind=None, health_timeout=180.0,
 
     tau, last = 0.0, time.monotonic()
     start_wall = last
-    crashed = False
+    crashed = aborted = False
+    was_air, stalled_since = False, None
     while tau < T[-1]:
         now = time.monotonic()
         dt, last = now - last, now
@@ -218,9 +252,21 @@ async def fly_async(mission_dir, port=14540, wind=None, health_timeout=180.0,
         await drone.offboard.set_position_velocity_ned(PositionNedYaw(*pn, yaw),
                                                        VelocityNedYaw(*vn, yaw))
         log.append((now - start_wall, tau, ph, *pos_enu, *ned2enu(state["vel"]), lag))
-        if ph >= 1 and not state["in_air"]:
+        # PX4's in-air flag lags takeoff by a second or two: a crash is being airborne and then
+        # down again before the end, or never getting airborne at all.
+        was_air = was_air or state["in_air"]
+        if (was_air and not state["in_air"]) or (not was_air and now - start_wall > 30.0):
             crashed = True
             break
+        # the reference waits for a lagging drone; one that stays far off for 20 s (after a
+        # collision, say) will not recover, so stop instead of drifting until the timeout
+        if scale <= 0.0:
+            stalled_since = stalled_since or now
+            if now - stalled_since > 20.0:
+                aborted = True
+                break
+        else:
+            stalled_since = None
         if now - start_wall > 4 * T[-1] + 120:
             break
         await asyncio.sleep(max(0.0, 1.0 / rate - (time.monotonic() - now)))
@@ -241,16 +287,43 @@ async def fly_async(mission_dir, port=14540, wind=None, health_timeout=180.0,
                         pos_enu=L[:, 3:6], vel_enu=L[:, 6:9], lag=L[:, 9],
                         wind=np.asarray(wind_log, float).reshape(-1, 4))
     info = dict(backend="px4", origin_enu=origin.tolist(), origin_source=origin_src,
-                completed=bool(tau >= T[-1]), crashed=crashed, wall_s=float(L[-1, 0]),
+                completed=bool(tau >= T[-1]), crashed=crashed, aborted=aborted,
+                wall_s=float(L[-1, 0]),
                 ref_s=float(T[-1]), wind=wind or None)
     (Path(mission_dir) / "flight.json").write_text(json.dumps(info, indent=1))
     return info
 
 
-def fly(mission_dir, px4=None, gui=False, wind=None, port=14540):
+def _wait_ready(proc, log_path: Path, timeout: float = 240.0) -> bool:
+    """True once PX4 reports 'Ready for takeoff'; False if it exits or fails to spawn.
+
+    Big worlds (hundreds of boxes) load slowly, and PX4 then gives up on spawning the model
+    ('gz_bridge failed to start'); a fresh launch usually works."""
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < timeout:
+        text = log_path.read_text(errors="replace") if log_path.exists() else ""
+        if "Ready for takeoff" in text:
+            return True
+        # (on success PX4 also prints "Startup script returned successfully")
+        if ("gz_bridge failed" in text or "Startup script returned with return value" in text
+                or proc.poll() is not None):
+            return False
+        time.sleep(1.0)
+    return False
+
+
+def fly(mission_dir, px4=None, gui=False, wind=None, port=14540, attempts=3):
     m, _, _ = load_mission(mission_dir)
     root = px4_dir(px4)
-    proc, log = launch(root, m, Path(mission_dir) / "px4.log", gui)
+    log_path = Path(mission_dir) / "px4.log"
+    for attempt in range(1, attempts + 1):
+        proc, log = launch(root, m, log_path, gui)
+        if _wait_ready(proc, log_path):
+            break
+        shutdown(proc, log, m["world_name"])
+        print("PX4/Gazebo launch attempt {} failed; retrying".format(attempt), flush=True)
+    else:
+        raise RuntimeError("PX4/Gazebo did not start after {} attempts".format(attempts))
     try:
         return asyncio.run(fly_async(mission_dir, port, wind))
     finally:
