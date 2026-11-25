@@ -6,3 +6,5 @@ datasets/
 *.tex
 .DS_Store
 FRIEND_GUIDE.md
+logs/
+CLOUD_GUIDE.md
