@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import warnings
+from pathlib import Path
 
 import matplotlib
 
@@ -211,7 +212,7 @@ def fig_learned():
     groups = ["other\ninstructions", "keep it\nlevel", "climb or descend\nin the open"]
     fig, axes = plt.subplots(2, 1, figsize=(3.5, 3.9))
     panels = ((axes[0], synth, TIER1, "Synthetic worlds (30 test worlds)"),
-              (axes[1], real, ("low", "high", "shortest"), "Austin LiDAR (59 blocks, no retraining)"))
+              (axes[1], real, ("low", "high", "shortest"), "Austin LiDAR (59 blocks, never trained on)"))
     for ax, data, tier1, title in panels:
         series = []
         for name, label, colour in (("k1_onehot", "1 channel", ONE), ("k2_onehot", "2 channels", TWO),
@@ -229,13 +230,20 @@ def fig_input():
     synth, real = load("held"), austin_rows()
     methods = (("k3_onehot", "class\ngiven"), ("k3_nli", "NLI"), ("k3_nli_adapter", "NLI +\nadapter"),
                ("k3_embedding", "sentence\nembedding"))
-    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    # models also trained on LiDAR of other cities, when those runs exist (corpus v2)
+    extra = (("k3_onehot_real", "class\ngiven +\nLiDAR"), ("k3_nli_adapter_real", "NLI +\nadapter +\nLiDAR"))
+    methods = methods[:1] + tuple(m for m in extra[:1] if m[0] in synth) + methods[1:3] \
+        + tuple(m for m in extra[1:] if m[0] in synth) + methods[3:]
+    fig, ax = plt.subplots(figsize=(3.5, 2.6))
     series = []
     for data, classes, label, colour in ((synth, CLASSES, "synthetic worlds", SYNTH),
-                                         (real, REAL_CLASSES, "Austin LiDAR", REAL)):
+                                         (real, REAL_CLASSES, "Austin LiDAR (held-out city)", REAL)):
         vals = [summary(data[m], classes) for m, _ in methods]
         series.append((label, colour, *zip(*vals)))
-    bars(ax, [name for _, name in methods], series, width=0.38)
+    bars(ax, [name for _, name in methods], series, width=0.38,
+         label_size=6.5 if len(methods) <= 4 else 5.2)
+    if len(methods) > 4:
+        ax.tick_params(axis="x", labelsize=6)
     style(ax, "extra cost, all instructions (%)")
     top_legend(fig, ax, 2, 0.9)
     return save(fig, "instruction_input")
@@ -460,6 +468,45 @@ def fig_planners():
     style(ax, "extra cost (%)")
     top_legend(fig, ax, 2, 0.84)
     return save(fig, "planner_comparison")
+
+
+def flight_rows(run, sim=None, source="austin"):
+    """Successful PX4 flights of one batch run on one city, each with its regret against the
+    oracle's own successful flight of the same block and instruction (so smoothing and tracking
+    error cancel). Flights that collided or never reached the goal are counted elsewhere."""
+    from .paths import SIM
+    rows = [json.loads(p.read_text()) for p in sorted(Path(sim or SIM, run).glob("**/metrics.json"))]
+    rows = [r for r in rows if r["backend"] == "px4" and r["source"] == source and r["success"]]
+    orc = {(r["index"], r["cls"]): r["flown_regret"] for r in rows if r["model"] == "oracle"}
+    for r in rows:
+        o = orc.get((r["index"], r["cls"]))
+        r["vs_oracle"] = None if o is None or r["flown_regret"] is None else \
+            (1 + r["flown_regret"]) / (1 + o) - 1
+    return rows
+
+
+def fig_flights(sim=None):
+    """Flown extra cost against the oracle's flight, PX4 + Gazebo, Austin."""
+    main, climb = flight_rows("heldout_v2", sim), flight_rows("level_climb", sim)
+    groups = (("other\ninstructions", main, ("low", "high", "shortest")),
+              ("keep it level\n(climbing blocks)", climb, ("level",)),
+              ("climb or descend\nin the open", main, TIER3))
+    fig, ax = plt.subplots(figsize=(3.5, 2.4))
+    series = []
+    for name, label, colour in (("k1_onehot_real", "1 channel, class given", ONE),
+                                ("k3_onehot_real", "3 channels, class given", THREE),
+                                ("k3_nli_adapter_real", "3 channels, NLI + adapter", NLI)):
+        vals = []
+        for _, rows, cls in groups:
+            v = np.array([100 * r["vs_oracle"] for r in rows
+                          if r["model"] == name and r["cls"] in cls and r["vs_oracle"] is not None])
+            boot = v[np.random.default_rng(0).integers(0, len(v), (10000, len(v)))].mean(1)
+            vals.append((v.mean(), np.percentile(boot, 2.5), np.percentile(boot, 97.5)))
+        series.append((label, colour, *zip(*vals)))
+    bars(ax, [g[0] for g in groups], series, width=0.26, label_size=5.8)
+    style(ax, "flown extra cost vs. oracle (%)")
+    top_legend(fig, ax, 2, 0.84)
+    return save(fig, "px4_flights")
 
 
 def main():
