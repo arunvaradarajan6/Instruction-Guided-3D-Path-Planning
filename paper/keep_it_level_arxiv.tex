@@ -1,0 +1,528 @@
+\documentclass{article}
+
+% ---- arXiv preprint style (inlined so no arxiv.sty file is needed) ----
+\makeatletter
+% fonts
+\renewcommand{\rmdefault}{ptm}
+\renewcommand{\sfdefault}{phv}
+
+% set page geometry
+\usepackage[verbose=true,letterpaper]{geometry}
+\AtBeginDocument{
+  \newgeometry{
+    textheight=9in,
+    textwidth=6.5in,
+    top=1in,
+    headheight=14pt,
+    headsep=25pt,
+    footskip=30pt
+  }
+}
+
+\widowpenalty=10000
+\clubpenalty=10000
+\flushbottom
+\sloppy
+
+
+
+\newcommand{\headeright}{A Preprint}
+\newcommand{\undertitle}{A Preprint}
+\newcommand{\shorttitle}{\@title}
+
+\usepackage{fancyhdr}
+\fancyhf{}
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0pt}
+\fancyheadoffset{0pt}
+\cfoot{\thepage}
+
+
+%Handling Keywords
+\def\keywordname{{\bfseries \emph{Keywords}}}%
+\def\keywords#1{\par\addvspace\medskipamount{\rightskip=0pt plus1cm
+\def\and{\ifhmode\unskip\nobreak\fi\ $\cdot$
+}\noindent\keywordname\enspace\ignorespaces#1\par}}
+
+% font sizes with reduced leading
+\renewcommand{\normalsize}{%
+  \@setfontsize\normalsize\@xpt\@xipt
+  \abovedisplayskip      7\p@ \@plus 2\p@ \@minus 5\p@
+  \abovedisplayshortskip \z@ \@plus 3\p@
+  \belowdisplayskip      \abovedisplayskip
+  \belowdisplayshortskip 4\p@ \@plus 3\p@ \@minus 3\p@
+}
+\normalsize
+\renewcommand{\small}{%
+  \@setfontsize\small\@ixpt\@xpt
+  \abovedisplayskip      6\p@ \@plus 1.5\p@ \@minus 4\p@
+  \abovedisplayshortskip \z@  \@plus 2\p@
+  \belowdisplayskip      \abovedisplayskip
+  \belowdisplayshortskip 3\p@ \@plus 2\p@   \@minus 2\p@
+}
+\renewcommand{\footnotesize}{\@setfontsize\footnotesize\@ixpt\@xpt}
+\renewcommand{\scriptsize}{\@setfontsize\scriptsize\@viipt\@viiipt}
+\renewcommand{\tiny}{\@setfontsize\tiny\@vipt\@viipt}
+\renewcommand{\large}{\@setfontsize\large\@xiipt{14}}
+\renewcommand{\Large}{\@setfontsize\Large\@xivpt{16}}
+\renewcommand{\LARGE}{\@setfontsize\LARGE\@xviipt{20}}
+\renewcommand{\huge}{\@setfontsize\huge\@xxpt{23}}
+\renewcommand{\Huge}{\@setfontsize\Huge\@xxvpt{28}}
+
+% sections with less space
+\providecommand{\section}{}
+\renewcommand{\section}{%
+  \@startsection{section}{1}{\z@}%
+                {-2.0ex \@plus -0.5ex \@minus -0.2ex}%
+                { 1.5ex \@plus  0.3ex \@minus  0.2ex}%
+                {\large\bf\raggedright}%
+}
+\providecommand{\subsection}{}
+\renewcommand{\subsection}{%
+  \@startsection{subsection}{2}{\z@}%
+                {-1.8ex \@plus -0.5ex \@minus -0.2ex}%
+                { 0.8ex \@plus  0.2ex}%
+                {\normalsize\bf\raggedright}%
+}
+\providecommand{\subsubsection}{}
+\renewcommand{\subsubsection}{%
+  \@startsection{subsubsection}{3}{\z@}%
+                {-1.5ex \@plus -0.5ex \@minus -0.2ex}%
+                { 0.5ex \@plus  0.2ex}%
+                {\normalsize\bf\raggedright}%
+}
+\providecommand{\paragraph}{}
+\renewcommand{\paragraph}{%
+  \@startsection{paragraph}{4}{\z@}%
+                {1.5ex \@plus 0.5ex \@minus 0.2ex}%
+                {-1em}%
+                {\normalsize\bf}%
+}
+\providecommand{\subparagraph}{}
+\renewcommand{\subparagraph}{%
+  \@startsection{subparagraph}{5}{\z@}%
+                {1.5ex \@plus 0.5ex \@minus 0.2ex}%
+                {-1em}%
+                {\normalsize\bf}%
+}
+\providecommand{\subsubsubsection}{}
+\renewcommand{\subsubsubsection}{%
+  \vskip5pt{\noindent\normalsize\rm\raggedright}%
+}
+
+% float placement
+\renewcommand{\topfraction      }{0.85}
+\renewcommand{\bottomfraction   }{0.4}
+\renewcommand{\textfraction     }{0.1}
+\renewcommand{\floatpagefraction}{0.7}
+
+\newlength{\@abovecaptionskip}\setlength{\@abovecaptionskip}{7\p@}
+\newlength{\@belowcaptionskip}\setlength{\@belowcaptionskip}{\z@}
+
+\setlength{\abovecaptionskip}{\@abovecaptionskip}
+\setlength{\belowcaptionskip}{\@belowcaptionskip}
+
+% swap above/belowcaptionskip lengths for tables
+\renewenvironment{table}
+  {\setlength{\abovecaptionskip}{\@belowcaptionskip}%
+   \setlength{\belowcaptionskip}{\@abovecaptionskip}%
+   \@float{table}}
+  {\end@float}
+
+% footnote formatting
+\setlength{\footnotesep }{6.65\p@}
+\setlength{\skip\footins}{9\p@ \@plus 4\p@ \@minus 2\p@}
+\renewcommand{\footnoterule}{\kern-3\p@ \hrule width 12pc \kern 2.6\p@}
+\setcounter{footnote}{0}
+
+% paragraph formatting
+\setlength{\parindent}{\z@}
+\setlength{\parskip  }{5.5\p@}
+
+% list formatting
+\setlength{\topsep       }{4\p@ \@plus 1\p@   \@minus 2\p@}
+\setlength{\partopsep    }{1\p@ \@plus 0.5\p@ \@minus 0.5\p@}
+\setlength{\itemsep      }{2\p@ \@plus 1\p@   \@minus 0.5\p@}
+\setlength{\parsep       }{2\p@ \@plus 1\p@   \@minus 0.5\p@}
+\setlength{\leftmargin   }{3pc}
+\setlength{\leftmargini  }{\leftmargin}
+\setlength{\leftmarginii }{2em}
+\setlength{\leftmarginiii}{1.5em}
+\setlength{\leftmarginiv }{1.0em}
+\setlength{\leftmarginv  }{0.5em}
+\def\@listi  {\leftmargin\leftmargini}
+\def\@listii {\leftmargin\leftmarginii
+              \labelwidth\leftmarginii
+              \advance\labelwidth-\labelsep
+              \topsep  2\p@ \@plus 1\p@    \@minus 0.5\p@
+              \parsep  1\p@ \@plus 0.5\p@ \@minus 0.5\p@
+              \itemsep \parsep}
+\def\@listiii{\leftmargin\leftmarginiii
+              \labelwidth\leftmarginiii
+              \advance\labelwidth-\labelsep
+              \topsep    1\p@ \@plus 0.5\p@ \@minus 0.5\p@
+              \parsep    \z@
+              \partopsep 0.5\p@ \@plus 0\p@ \@minus 0.5\p@
+              \itemsep \topsep}
+\def\@listiv {\leftmargin\leftmarginiv
+              \labelwidth\leftmarginiv
+              \advance\labelwidth-\labelsep}
+\def\@listv  {\leftmargin\leftmarginv
+              \labelwidth\leftmarginv
+              \advance\labelwidth-\labelsep}
+\def\@listvi {\leftmargin\leftmarginvi
+              \labelwidth\leftmarginvi
+              \advance\labelwidth-\labelsep}
+
+% create title
+\providecommand{\maketitle}{}
+\renewcommand{\maketitle}{%
+  \par
+  \begingroup
+    \renewcommand{\thefootnote}{\fnsymbol{footnote}}
+    % for perfect author name centering
+    %\renewcommand{\@makefnmark}{\hbox to \z@{$^{\@thefnmark}$\hss}}
+    % The footnote-mark was overlapping the footnote-text,
+    % added the following to fix this problem               (MK)
+    \long\def\@makefntext##1{%
+      \parindent 1em\noindent
+      \hbox to 1.8em{\hss $\m@th ^{\@thefnmark}$}##1
+    }
+    \thispagestyle{empty}
+    \@maketitle
+    \@thanks
+    %\@notice
+  \endgroup
+  \let\maketitle\relax
+  \let\thanks\relax
+}
+
+% rules for title box at top of first page
+\newcommand{\@toptitlebar}{
+  \hrule height 2\p@
+  \vskip 0.25in
+  \vskip -\parskip%
+}
+\newcommand{\@bottomtitlebar}{
+  \vskip 0.29in
+  \vskip -\parskip
+  \hrule height 2\p@
+  \vskip 0.09in%
+}
+
+% create title (includes both anonymized and non-anonymized versions)
+\providecommand{\@maketitle}{}
+\renewcommand{\@maketitle}{%
+  \vbox{%
+    \hsize\textwidth
+    \linewidth\hsize
+    \vskip 0.1in
+    \@toptitlebar
+    \centering
+    {\LARGE\sc \@title\par}
+    \@bottomtitlebar
+    \vskip 0.1in
+    \def\And{%
+      \end{tabular}\hfil\linebreak[0]\hfil%
+      \begin{tabular}[t]{c}\bf\rule{\z@}{24\p@}\ignorespaces%
+    }
+    \def\AND{%
+      \end{tabular}\hfil\linebreak[4]\hfil%
+      \begin{tabular}[t]{c}\bf\rule{\z@}{24\p@}\ignorespaces%
+    }
+    \begin{tabular}[t]{c}\bf\rule{\z@}{24\p@}\@author\end{tabular}%
+  \vskip 0.3in
+  }
+}
+
+% add conference notice to bottom of first page
+\newcommand{\ftype@noticebox}{8}
+\newcommand{\@notice}{%
+  % give a bit of extra room back to authors on first page
+  \enlargethispage{2\baselineskip}%
+  \@float{noticebox}[b]%
+    \footnotesize\@noticestring%
+  \end@float%
+}
+
+% abstract styling
+\renewenvironment{abstract}
+{
+  \centerline
+  {\large \bfseries \scshape Abstract}
+  \begin{quote}
+}
+{
+  \end{quote}
+}
+
+\makeatother
+% ---- end of style ----
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[hidelinks]{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts,amsmath,amssymb}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage[section]{placeins}
+
+\title{Keep It Level: Direction-Dependent Cost Fields for Instruction-Guided 3D Path Planning}
+
+\author{
+  Arun Varadarajan \\
+  University of Washington \\
+  Seattle, WA, USA \\
+  \texttt{arunv2@uw.edu}
+}
+
+
+\hypersetup{
+  pdftitle={Keep It Level: Direction-Dependent Cost Fields for Instruction-Guided 3D Path Planning},
+  pdfauthor={Arun Varadarajan},
+  pdfkeywords={path planning, aerial robots, natural language instructions, cost maps, anisotropic planning},
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Instruction-guided path planning lets a user shape a robot's route with plain language, such as ``stay low'' or ``keep it level.'' A recent method, the instruction-guided probabilistic roadmap, predicts a cost map from an occupancy map and a sentence and then plans on that map. Its cost map stores one value per cell, so the cost of a move depends on its length but not on its direction. For aerial robots this is a real limit: climbing and flying sideways cost the same, and an instruction such as ``keep it level'' cannot be expressed. This paper extends instruction-guided planning to three dimensions with direction-dependent cost fields that store separate costs for travel, climbing, and descending. The closest single-channel field loses 14 percent on ``keep it level,'' a uniform split between climb and descent cost has no effect on the chosen path, and when the instruction class is given, learned three-channel fields come within about 2 to 3 percent of optimal on average over three training runs. On aerial LiDAR of downtown Austin, a city never used in training, the same trends hold, and adding LiDAR of 11 other U.S. cities to training lowers the regret with the class given to under 1 percent. In 143 simulated quadrotor flights over Austin in PX4 and Gazebo, the difference survives flight dynamics: where the shortest route climbs, single-channel ``keep it level'' routes cost 27 percent more than the oracle's route once flown, while three-channel routes match it. Turning free-form text into the right cost remains the main bottleneck.
+\end{abstract}
+
+\keywords{path planning \and aerial robots \and natural language instructions \and cost maps \and anisotropic planning}
+
+\section{Introduction}
+
+\subsection{Background}
+Robots are often told not only where to go, but how to get there. A drone inspecting a building may be asked to stay low, avoid tight gaps, or hold a steady altitude. Instruction-guided path planning turns such requests into routes. The instruction-guided probabilistic roadmap (IG-PRM) \cite{bao2025igprm} does this in two steps. First, a neural network reads an occupancy map and a sentence and predicts a cost map. Second, a probabilistic roadmap (PRM) \cite{kavraki1996prm} plans the cheapest path on that map. The network never sees the start or goal, so one cost map serves every query in the same environment.
+
+IG-PRM works in 2D, and its cost map stores one number per cell. The cost of a move is that number times the length of the move. This is enough for many instructions, such as ``prefer wide passages.'' It is not enough for aerial robots. With one number per cell, a move that climbs three meters costs exactly the same as a move that slides three meters sideways, so an instruction like ``keep it level'' cannot be written into the map, whatever values the network predicts.
+
+This paper extends instruction-guided planning to 3D with direction-dependent cost fields (Fig.~\ref{fig:overview}). Each voxel stores up to three numbers: a cost per unit of travel, an extra cost per unit of climb, and an extra cost per unit of descent. The contributions are:
+\begin{itemize}
+\item A direction-dependent cost field and planner for instruction-guided 3D planning, in which the single-channel baseline is an exact special case.
+\item A set of instructions ordered by how much the cost field must express, with evidence that one channel fails on ``keep it level'' and that three channels are needed to tell ``climb in the open'' from ``descend in the open.''
+\item A short proof and a test showing that a uniform split between climb and descent cost does not change the chosen path.
+\item An evaluation over three training runs with confidence intervals, a test on aerial LiDAR of a city never seen in training, and flights of the planned routes by a simulated quadrotor in PX4 and Gazebo.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{method_overview.png}
+\caption{Method overview on a synthetic test world, seen from the side (grey bars: walls; boxes: windows, solid for wide and dotted for narrow). A 3D U-Net reads the occupancy grid and the instruction and predicts three cost channels, shown averaged across the width of the world. For ``climb in the open,'' the predicted climb cost is high next to walls and the border, while the travel and descent costs stay low. A PRM plans on this field (solid line), climbing in open space with an average clearance of 8.1 voxels, against 6.2 for the shortest path (dashed). The network is given the instruction class.}
+\label{fig:overview}
+\end{figure}
+
+\subsection{Related Work}
+\textit{Instruction-guided planning.} IG-PRM \cite{bao2025igprm} feeds a frozen sentence embedding and an occupancy map into a cost-map network, then samples roadmap nodes where the predicted cost is low.
+\textit{Language-guided navigation.} Vision-and-language navigation \cite{anderson2018vln} and its aerial version, AerialVLN \cite{liu2023aerialvln}, train agents to follow directions to a goal. These methods decide where to go; this paper studies how to travel between a fixed start and goal.
+\textit{Direction-dependent planning.} Planning with costs that depend on the direction of motion is well studied. Ordered upwind methods solve such problems on grids \cite{sethian2001oum}, and CAMIS models the direction-dependent cost of driving on slopes \cite{sanchez2021camis}. The new element here is that the direction-dependent cost is predicted from an instruction.
+
+\section{Methodology}
+
+\subsection{Problem Setup}
+The environment is a voxel grid of occupied and free cells with $z$ pointing up, a common map format for aerial robots \cite{hornung2013octomap}. An instruction is a short sentence. A network maps the grid and the sentence to a cost field, and a planner finds the cheapest path from a start to a goal on that field.
+\subsection{Direction-Dependent Cost Fields}
+A cost field with $K$ channels stores a travel cost $c$ at each voxel and up to two vertical costs. For a straight move of length $L$ with vertical change $\Delta z$, the cost is
+\begin{equation}
+w = \bar{c}\,L + \bar{a}_{\mathrm{up}}\max(\Delta z,0) + \bar{a}_{\mathrm{dn}}\max(-\Delta z,0), \label{eq:cost}
+\end{equation}
+where each bar is the average of that channel along the move. With $K=1$ only $c$ is used, which is IG-PRM's cost lifted to 3D. With $K=2$ one vertical cost applies to both directions. With $K=3$ climbing and descending have separate costs. The single-channel field is exactly the three-channel field with both vertical costs set to zero, so any difference between them comes from the vertical channels alone. Since the two vertical costs can differ, a move from voxel $u$ to $v$ and the reverse move can cost different amounts, and both planners store both directions.
+
+\subsection{What One Channel Cannot Express}
+A single-channel field multiplies cost by length, whatever the direction. The closest single-channel field to a three-channel field, in the least-squares sense over the 26 grid directions, is $c' = c + \beta(a_{\mathrm{up}}+a_{\mathrm{dn}})$ with $\beta \approx 0.25$. The closest two-channel field uses the average of the two vertical costs. These are the closest fields of each size, not necessarily the lowest-regret ones.
+
+Three channels also have a limit. Along any path, the total climb $A$ minus the total descent $D$ equals $z_{\mathrm{goal}} - z_{\mathrm{start}}$. If the vertical costs are the same everywhere, then
+\begin{equation}
+a_{\mathrm{up}}A + a_{\mathrm{dn}}D = (a_{\mathrm{up}}+a_{\mathrm{dn}})\,D + a_{\mathrm{up}}\,(z_{\mathrm{goal}}-z_{\mathrm{start}}). \label{eq:degen}
+\end{equation}
+The last term is the same for every path, so the best path depends only on the sum of the two costs, not on how it is split. A preference about climbing versus descending therefore matters only when it changes over space, as in ``do your climbing in the open.''
+
+\subsection{Instruction Classes and Ground Truth}
+Table~\ref{tab:classes} lists the eight instruction classes. Each class has 48 sentences: 16 hand-written originals and 32 paraphrases. A further 10 sentences per class are written in a different register, giving reasons or describing the situation instead of stating the preference (``The prop guards are fragile, so give yourself room everywhere''). These are never used in training and form a hard test set. Tier~1 needs one channel, tier~2 needs two, and tier~3 needs three. For each environment and class, a ground-truth field is computed from the geometry. Costs never drop below 0.125, the cost of open space, so shorter paths are always preferred. The two opening classes raise the travel cost near narrow or wide windows, and near or away from surfaces. ``Stay low'' and ``stay high'' make the cost grow with or against height. ``Keep it level'' sets both vertical costs to 0.875. ``Climb in the open'' sets $a_{\mathrm{up}} = 0.875\,(1-o)$, where the openness $o$ is the distance to the nearest surface over six voxels, capped at 1, and ``descend in the open'' does the same for $a_{\mathrm{dn}}$. Fig.~\ref{fig:examples} shows the best paths for four pairs of opposite instructions in one test world.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{example_paths.png}
+\caption{Best paths under the true cost fields for four pairs of opposite instructions in one synthetic test world, seen from the side. Symbols as in Fig.~\ref{fig:overview}; light bars are pillars, the circle is the start, and the star is the goal.}
+\label{fig:examples}
+\end{figure}
+
+\begin{table}[t]
+\caption{Instruction Classes}
+\label{tab:classes}
+\centering
+\begin{tabular}{@{}llp{8cm}@{}}
+\toprule
+Class & Tier & Example sentence \\
+\midrule
+Wide openings & 1 & ``Choose the widest opening you can find.'' \\
+Tight gaps & 1 & ``Squeeze through the tight openings.'' \\
+Stay low & 1 & ``Stay low.'' \\
+Stay high & 1 & ``Hug the ceiling.'' \\
+Shortest & 1 & ``Take the most direct route.'' \\
+Keep it level & 2 & ``Keep it level.'' \\
+Climb in the open & 3 & ``Do your climbing in the open, not in the clutter.'' \\
+Descend in the open & 3 & ``Only lose height where there is room around you.'' \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Cost Network and Language Conditioning}
+The cost network is a 3D U-Net \cite{ronneberger2015unet,cicek2016unet3d} with three down-sampling levels. As in IG-PRM, an instruction vector is copied to every voxel and stacked with the occupancy grid as input. The network outputs $K$ channels scaled to $[0,1]$ and is trained with binary cross-entropy. Four ways of building the instruction vector are compared:
+\begin{itemize}
+\item \textit{One-hot}: the class label. It cannot read new wording and serves as an upper bound with perfect language understanding.
+\item \textit{Frozen embedding}: a sentence embedding \cite{reimers2019sbert} from MPNet \cite{song2020mpnet}, reduced to 16 numbers with principal component analysis fit on training sentences. This follows IG-PRM.
+\item \textit{Natural language inference (NLI)}: a DeBERTaV3 model \cite{he2023debertav3} fine-tuned on MNLI, FEVER, and ANLI \cite{williams2018mnli,thorne2018fever,nie2020anli} scores how strongly ``The drone is instructed: \ldots'' implies each of 12 short statements, such as ``The drone should fly low, near the floor.'' The vector holds the log-odds of the 12 scores, a form of zero-shot classification \cite{yin2019zeroshot}.
+\item \textit{NLI with adapter}: the NLI vector is standardized with statistics of the training sentences and passed through a small network (two hidden layers of 64 units) that outputs 16 numbers.
+\end{itemize}
+
+\subsection{Planners}
+Two planners are used. An exact planner runs Dijkstra's algorithm \cite{dijkstra1959} on the 26-connected voxel graph, allowing diagonal moves only when no corner is cut. It always finds the cheapest path, so it tests the cost field alone. The full method is a 3D PRM in the style of IG-PRM. It samples 5000 nodes with probability proportional to $1/(c+0.1)$, connects each node to its 30 nearest neighbors within 12 voxels, and stores a forward and a backward cost for each edge using \eqref{eq:cost}. Nodes sit at whole-number heights so that exactly level edges exist.
+
+\subsection{From Path to Flight}\label{sec:flight}
+To test whether a planned path can be flown, each grid path is turned into a trajectory for a quadrotor. Waypoints are first shortcut where the straight segment costs no more under the planning field, then smoothed by corner cutting while keeping at least 1.8~m from any occupied voxel. The smooth path is timed with limits of 4~m/s horizontal speed, 1.5~m/s climb, 1.0~m/s descent, 1.5~m/s$^2$ along the path, and 2.0~m/s$^2$ across it, and is checked against these limits and the clearance before flight. A quadrotor has no minimum turning radius, but it cannot turn sharply at speed, so the lateral acceleration limit sets the speed through each turn. The trajectory is flown by the x500 quadrotor model in PX4 v1.15.4 software-in-the-loop with Gazebo Harmonic, where the voxel map is built as solid boxes. Position and velocity setpoints are sent at 20~Hz through MAVSDK, and the reference slows down when the vehicle falls behind it, so a slow vehicle is not pulled into a corner. A flight succeeds if the vehicle reaches the goal without coming closer to an occupied voxel than its own radius after take-off. The cost network sees only the map and the instruction, as in IG-PRM; the dynamics enter only after planning.
+
+\section{Experimental Setup}
+
+\subsection{Synthetic Environments}
+Each environment is a $48\times48\times48$ voxel grid with a solid border. It contains one to three full-height walls. Each wall has one narrow window (3--4 voxels wide) and one wide window (8--11 voxels wide) at independent random heights, so choosing a window also means choosing how much to climb. Up to four pillars add clutter. The start and goal sit at opposite ends at the same height, so every path must descend as much as it climbs. Training, validation, and test sets use 600, 60, and 30 environments generated from separate random seeds. Experiments without a network use the first 20, 24, or 40 environments from the same test seed.
+
+\subsection{Real Environments From Aerial LiDAR}
+Public-domain LiDAR from the USGS 3D Elevation Program \cite{usgs3dep} was converted into voxel grids. Each 4~m column is marked solid up to its highest return from ground, vegetation, buildings, water, rail, or bridges, while noise, power lines, and unclassified points are removed. The grid is cut into $48^3$ blocks, each 192~m on a side, and the start and goal sit at the same height, just above the taller surface beneath them. The test city is downtown Austin, Texas: one tile of about 1.5 by 1.7~km with about 18 million points, of which 59 of the 63 blocks pass checks for coverage and a valid start and goal. Austin is never used in training. For training, 3,851 blocks, overlapping by half a block, were cut from 11 other U.S. cities: nine downtowns (New York, Chicago, San Francisco, Boston, Denver, Atlanta, Washington, Houston, and Los Angeles), a forest near Portland, and a suburb of Phoenix. These blocks are not box worlds: they contain street canyons between high-rise buildings, tree canopy, and irregular low buildings and terrain, so the network is not trained on synthetic scenes alone, and Austin serves only as a held-out test city. Real scans have no window labels, so the two opening classes are not used on real blocks.
+
+\subsection{Training}\label{sec:training}
+Each model is trained for 20 epochs with Adam \cite{kingma2015adam} (learning rate $10^{-3}$, cosine schedule, batch size 4) on one NVIDIA A10 GPU. In each training run, 4 of the 16 original sentences per class are held out, so 44 sentences per class are used for training. The checkpoint with the lowest loss on held-out sentences and validation environments is kept. These sentences are never used for weight updates, but they also serve as the new-wording test set, which may make those results slightly optimistic; the hard test set is not used for model selection. Models marked ``+ LiDAR'' are also trained on the real blocks of the 11 training cities, mixed so that half of the samples in every epoch are real, with a fresh random subset of real blocks each epoch.
+
+\subsection{Metrics}
+The main metric is regret, reported in the figures as extra cost: the cost of the planned path under the true three-channel field, divided by the cost of the best path, minus one. A regret of zero means the path is optimal for the instruction. PRM regret is measured against a PRM on the true field, so it can be slightly negative; cases where either PRM finds no path are excluded. Each model is trained with three random seeds, which change both the initial weights and the held-out sentences. Results give the mean over seeds, a 95\% bootstrap confidence interval (CI) over test environments \cite{efron1979bootstrap}, and the number of runs in which a difference has the same sign. For a flight, the flown path is scored the same way under the true field. Because smoothing shortens paths and tracking adds small altitude changes, the flown cost is compared with the oracle's flight of the same block and instruction, $(1+r)/(1+r_{\mathrm{oracle}})-1$, so that errors common to all planners cancel.
+
+\section{Results}
+
+\subsection{Uniform Vertical Costs Do Not Change the Path}\label{sec:uniform}
+On 20 test environments, three fields with the same total vertical cost but different climb and descent splits gave a largest cross-regret of $2.7\times10^{-8}$, which is zero up to rounding, as \eqref{eq:degen} predicts. When the vertical cost changed over space, comparing ``climb in the open'' with ``descend in the open,'' the cross-regret averaged 47\% and was non-zero in 90\% of environments.
+
+\subsection{How Many Channels Are Needed}\label{sec:channels}
+Fig.~\ref{fig:channels} plans each instruction with the closest one- and two-channel versions of its true field and scores each path under the true field. On tier~1, both reach zero regret. On ``keep it level,'' the closest single-channel field loses 14.4\% on synthetic environments and 16.4\% on Austin (95\% CI 8.8--25.2), while two channels are exact. A hand-designed single-channel field that is given the start height, which a multi-query map cannot know, still loses 10.5\%. Neither comes near the zero regret of two channels. On tier~3, one channel loses 15--17\% on synthetic environments and 34\% on Austin. Two channels come close on cost, but they give ``climb in the open'' and ``descend in the open'' identical fields and cannot tell the two apart. With three channels, the average clearance where the path climbs is 5.9 voxels for ``climb in the open'' and 3.3 voxels for ``descend in the open.'' Over eight settings of the open-space cost ratio (2--16) and window influence radius (6 or 12), one channel always lost on these instructions, by 1.6\% to 28.8\% on ``keep it level'' as the ratio grows; the openness distance was not varied.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.55\textwidth]{channels_needed.png}
+\caption{Extra path cost when each instruction is planned with the closest (least-squares) one- or two-channel version of its true cost field (lower is better; the true three-channel field scores 0). Tier-1 instructions score 0 for both and are not shown. Error bars: 95\% confidence intervals over 40 synthetic test worlds and 59 Austin blocks.}
+\label{fig:channels}
+\end{figure}
+
+\subsection{Learned Cost Fields}
+Fig.~\ref{fig:learned} shows learned fields when the instruction class is given directly. The learned three-channel field has a mean regret of 2.6\% (95\% CI 2.2--3.0) with the exact planner, and the full method with the PRM has 2.0\%, with the worst class at 5.6\%. A learned single-channel field loses 19.0 percentage points on ``keep it level'' (19.3, 18.4, and 19.3 in the three runs) and 13.9 points on tier~3, and through the PRM its regret on ``keep it level'' reaches 36.3\%. A learned two-channel field is exact on ``keep it level'' but loses 3.3 points on tier~3. Each of these differences holds in all three runs.
+
+Fig.~\ref{fig:planners} compares the exact planner with the PRM. For three-channel fields, the PRM stays close to the exact planner in every group, with at most 3.1\% on the tier-1 instructions and 0.1\% on ``keep it level.'' For single-channel fields, the PRM makes the failure on ``keep it level'' larger, from 19.0\% to 36.3\%. On tier-1 instructions, the single-channel model is slightly better (1.1\% against 3.9\% with the exact planner, in all three runs), a small cost of the extra channels on instructions that do not need them.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.55\textwidth]{learned_channels.png}
+\caption{Extra path cost of learned cost fields with one, two, or three channels when the instruction class is given (lower is better). Exact planner, models trained on synthetic worlds only. Bars show the mean of three training runs, and error bars show 95\% confidence intervals over test environments. ``Other instructions'' are the tier-1 classes; on Austin these are stay low, stay high, and shortest.}
+\label{fig:learned}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.55\textwidth]{planner_comparison.png}
+\caption{Extra path cost of learned one- and three-channel fields with the exact planner and with the PRM, when the instruction class is given (lower is better; synthetic test worlds). PRM results are measured against a PRM on the true field. Mean of three training runs with 95\% confidence intervals.}
+\label{fig:planners}
+\end{figure}
+
+\subsection{Language Conditioning}
+Before any cost network was trained, a linear classifier was fit on each type of instruction vector and tested on held-out sentences, averaged over five sentence splits (Fig.~\ref{fig:probe}). The embedding probe reads the full embedding, not the 16 numbers the network sees. The frozen embedding reached 69\% on the 8-way task and was at or near chance on opposites: 50\% for wide versus tight and 60\% for low versus high. The NLI vector reached 84\%, 90\%, and 100\%. On the hard test set, accuracy fell to 59\% for the embedding and 69\% for NLI. Sentence embeddings capture topic well but not polarity, since ``prefer wide gaps'' and ``prefer narrow gaps'' are about the same topic.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.55\textwidth]{sentence_probe.png}
+\caption{Accuracy of a linear classifier that predicts the instruction class from each type of sentence vector, tested on held-out sentences (higher is better). Dashed lines mark chance.}
+\label{fig:probe}
+\end{figure}
+
+Inside the planner, the gap is smaller than the probe suggests (Fig.~\ref{fig:input}). On held-out sentences, mean regret is 9.2\% with NLI and 13.1\% with the frozen embedding, against 2.6\% with the class given. NLI beats the embedding by 3.9 points and trails the class by 6.6 points, both in all three runs. On the hard test set, regret rises to 14.6\% with NLI and 15.9\% with the embedding, and NLI is better in only one of three runs. By class, NLI separates ``stay low'' from ``stay high'' in every run, while no text-based model clearly separates wide openings from tight gaps, even on sentences seen in training. Fig.~\ref{fig:perclass} breaks the results down by instruction. NLI has lower regret than the embedding on four of the five tier-1 classes, while the embedding is better on ``shortest,'' on ``keep it level'' (1.4\% against 2.9\%), and on both tier-3 classes, so the two methods fail in different places. Wide openings are the hardest class for every method, including one-hot (8.9\%).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.55\textwidth]{instruction_input.png}
+\caption{Extra path cost of three-channel fields, averaged over all instructions, for different ways of giving the instruction (lower is better; exact planner). ``Class given'' is the upper bound; the other models read held-out sentences (Section~\ref{sec:training}). ``+ LiDAR'' models are also trained on LiDAR of 11 other cities; Austin is never used in training. Mean of three training runs with 95\% confidence intervals.}
+\label{fig:input}
+\end{figure}
+
+One fix was tested: a small adapter network that standardizes the NLI vector before it enters the U-Net. On synthetic worlds it did not help (9.6\% against 9.2\% on held-out sentences, better in only one of three runs). On Austin it lowered regret from 13.9\% to 11.5\%, in two of three runs. Its larger gain came with real training data, described next.
+
+Language is therefore the largest source of error in the pipeline. With the class given, the cost field and planner leave 2.6\% regret; free text adds 6.6 points with NLI and more on sentences in a new register. NLI fixes the confusion of opposites that a frozen embedding shows for ``stay low'' and ``stay high,'' but not for wide openings and tight gaps.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.55\textwidth]{per_instruction.png}
+\caption{Extra path cost per instruction on held-out sentences for three-channel fields (lower is better). Mean of three training runs with 95\% confidence intervals over 30 synthetic test worlds. Dashed lines separate the tiers.}
+\label{fig:perclass}
+\end{figure}
+
+\subsection{Transfer to Real Aerial LiDAR}
+All models were tested on the 59 Austin blocks with the exact planner (Figs.~\ref{fig:learned} and~\ref{fig:input}). Fig.~\ref{fig:paths} shows one block: the ``keep it level'' path stays at one altitude and goes around a tall building, while the shortest path climbs over lower roofs. With the class given and no real data in training, the three-channel field has a mean regret of 1.9\% (95\% CI 1.5--2.3). The single-channel field again fails on ``keep it level'' and tier~3, losing 43.5 and 36.2 points in all three runs. On the 25 blocks where the shortest path climbs, its loss on ``keep it level'' is 65.6 points. The two-channel field is only 0.3 points behind on tier~3, and only in two of three runs, which matches the oracle result that the climb and descent split matters little on these blocks. The weakest class is ``stay low'' at 8.8\%. On tier~1 the single- and three-channel fields do about equally well. With free text, the embedding does better than NLI on Austin (7.5\% against 13.9\%, in two of three runs): NLI fails on ``keep it level'' in one run (101\%) and is weaker on tier~3 in every run, while the embedding is weakest on ``stay low.''
+
+Adding the LiDAR of the 11 training cities helps on both synthetic and real tests. With the class given, regret on Austin falls from 1.9\% to 0.8\% (CI 0.7--0.9) and on synthetic worlds from 2.6\% to 2.0\%, both in all three runs. With NLI and the adapter, it falls from 11.5\% to 3.1\% (CI 2.7--3.7) on Austin and from 9.6\% to 7.0\% on synthetic worlds, again in all three runs. A single-channel model trained the same way still loses 19.9 points on ``keep it level'' and 36.6 on tier~3 on Austin, so more data does not remove the need for vertical channels.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.55\textwidth]{paths_keep_level.png}
+\caption{Oracle paths on one 192~m Austin block. Top: roof and ground height, with the ``keep it level'' path (solid) and the shortest path (dashed). Bottom: altitude along each path. The level path flies around the tallest building, while the shortest path climbs over lower roofs.}
+\label{fig:paths}
+\end{figure}
+
+\subsection{Flight Tests in PX4 and Gazebo}
+Four Austin blocks were drawn at random, and every real instruction class was flown on each with four planners: the oracle (the true field), and the ``+ LiDAR'' single-channel, three-channel, and NLI-with-adapter models from the first training run, which read held-out sentences. Since ``keep it level'' only matters where the shortest path climbs, it was also flown on 12 of the 25 such blocks. One of the 144 planned flights failed to start in the simulator. Of the other 143, 140 reached the goal without collision. The three collisions came from three different planners, the oracle among them, so they reflect flying close to buildings rather than the cost field. On successful flights, the root-mean-square distance from the planned path was 0.2~m, so the planned paths can be flown under these speed and acceleration limits.
+
+Fig.~\ref{fig:flights} shows the results, measured against the oracle's flight. The flown differences match the planned ones. On ``keep it level'' where the shortest path climbs, the single-channel field flies 26.8\% above the oracle (CI 15.1--39.8), the three-channel field $-0.9\%$ (CI $-1.8$--0.0), and NLI with the adapter 12.5\% (CI 2.7--23.7), close to their planned regrets of 32.0\%, 0\%, and 16.8\%. On tier~3 the single-channel field flies 28.0\% above the oracle, and both three-channel models are within 0.3\%. On the other instructions all three are within 1.2\%. Measured against the grid optimum instead, even the oracle's flights score $-3$ to $+7\%$: smoothing shortens paths, and small altitude changes while tracking count as climbing on ``keep it level.'' The regret differences between planners are therefore not an artifact of scoring geometric paths: they hold for paths that are actually flown.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.55\textwidth]{px4_flights.png}
+\caption{Extra cost of the path flown by the simulated quadrotor in PX4 and Gazebo over Austin, relative to the oracle's flight of the same block and instruction (lower is better). Successful flights only. ``Keep it level'' is flown on 12 blocks where the shortest path climbs; the other groups on four random blocks. Error bars: 95\% bootstrap confidence intervals over flights.}
+\label{fig:flights}
+\end{figure}
+
+\section{Discussion}
+When an instruction is about the direction of motion, a cost map with one number per cell cannot represent it, and adding vertical channels fixes this at little cost. A third channel matters only when the climb and descent split changes over space; on the Austin blocks it changed where paths climbed more than how much they cost. The difference holds on a city never seen in training and when a simulated quadrotor flies the routes.
+
+The language step is still the main weakness. NLI reads polarity better than a frozen embedding, but free text still adds 5--7 points of regret on synthetic worlds, more on sentences in a new register, and no text-based model clearly separated wide from tight openings. The language conditioning is evaluated in closed loop, but, to stay close to IG-PRM, the cost network is not conditioned on the vehicle's dynamics; the dynamics enter only after planning, in trajectory generation and flight. There are other limits as well. Real-scene results come from one held-out city. Training covers downtowns, a forest, and a suburb, but more LiDAR tests, on other cities, forest canopy, and full 3D scans, are needed. Indoor environments and thin obstacles such as cables are untested: aerial LiDAR does not see indoors, and power-line returns are removed. The LiDAR blocks are 2.5D, so the space under roofs and trees counts as solid. Window widths come from generator labels, so opening-based instructions could not be tested on real data. The flights use one simulated vehicle, without wind or battery limits. Future work includes a geometric opening detector for real scans, instructions with more than one preference, conditioning the cost on the vehicle's dynamics, and flights on hardware.
+
+\section{Conclusion}
+This paper extended instruction-guided path planning to 3D with direction-dependent cost fields. Single-channel cost maps cannot express instructions about vertical motion such as ``keep it level,'' and a third channel matters only for spatial preferences about climbing. With the instruction class given, the full method comes within about 2 to 3\% of optimal, the same holds on a city never seen in training, and the difference survives when the routes are flown in simulation. Free-form text adds 5--7 points of regret, so better language conditioning is the most direct next step.
+
+\section*{Acknowledgment}
+An AI assistant (Claude Opus 5, Anthropic) was used to help write the code implementing the direction-dependent cost fields, the evaluation code, and the flight-simulation code, and to help revise the manuscript. The author designed the study, implemented environment generation, training, and planning, checked all results, and takes full responsibility for the content. All code is available at https://github.com/arunvaradarajan6/Instruction-Guided-3D-Path-Planning for reproduction and validation of
+results in this paper.
+
+\begin{thebibliography}{00}
+\bibitem{bao2025igprm} J. Bao and R. Yonetani, ``Path planning using instruction-guided probabilistic roadmaps,'' in \textit{Proc. IEEE Int. Conf. Robot. Autom. (ICRA)}, 2025. \url{https://arxiv.org/abs/2502.16515}
+\bibitem{kavraki1996prm} L. E. Kavraki, P. \v{S}vestka, J.-C. Latombe, and M. H. Overmars, ``Probabilistic roadmaps for path planning in high-dimensional configuration spaces,'' \textit{IEEE Trans. Robot. Autom.}, vol. 12, no. 4, pp. 566--580, 1996. doi: 10.1109/70.508439.
+\bibitem{anderson2018vln} P. Anderson \textit{et al.}, ``Vision-and-language navigation: Interpreting visually-grounded navigation instructions in real environments,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2018, pp. 3674--3683. doi: 10.1109/CVPR.2018.00387.
+\bibitem{liu2023aerialvln} S. Liu, H. Zhang, Y. Qi, P. Wang, Y. Zhang, and Q. Wu, ``AerialVLN: Vision-and-language navigation for UAVs,'' in \textit{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)}, 2023, pp. 15338--15348. doi: 10.1109/ICCV51070.2023.01411.
+\bibitem{sethian2001oum} J. A. Sethian and A. Vladimirsky, ``Ordered upwind methods for static Hamilton--Jacobi equations,'' \textit{Proc. Nat. Acad. Sci.}, vol. 98, no. 20, pp. 11069--11074, 2001. doi: 10.1073/pnas.201222998.
+\bibitem{sanchez2021camis} J. R. S\'anchez-Ib\'a\~nez, C. J. P\'erez-del-Pulgar, J. Ser\'on, and A. Garc\'ia-Cerezo, ``Optimal path planning using CAMIS: A continuous anisotropic model for inclined surfaces,'' arXiv:2103.03849, 2021. \url{https://arxiv.org/abs/2103.03849}
+\bibitem{hornung2013octomap} A. Hornung, K. M. Wurm, M. Bennewitz, C. Stachniss, and W. Burgard, ``OctoMap: An efficient probabilistic 3D mapping framework based on octrees,'' \textit{Auton. Robots}, vol. 34, no. 3, pp. 189--206, 2013. doi: 10.1007/s10514-012-9321-0.
+\bibitem{ronneberger2015unet} O. Ronneberger, P. Fischer, and T. Brox, ``U-Net: Convolutional networks for biomedical image segmentation,'' in \textit{Proc. Med. Image Comput. Comput.-Assist. Interv. (MICCAI)}, 2015, pp. 234--241. doi: 10.1007/978-3-319-24574-4\_28.
+\bibitem{cicek2016unet3d} \"O. \c{C}i\c{c}ek, A. Abdulkadir, S. S. Lienkamp, T. Brox, and O. Ronneberger, ``3D U-Net: Learning dense volumetric segmentation from sparse annotation,'' in \textit{Proc. Med. Image Comput. Comput.-Assist. Interv. (MICCAI)}, 2016, pp. 424--432. doi: 10.1007/978-3-319-46723-8\_49.
+\bibitem{reimers2019sbert} N. Reimers and I. Gurevych, ``Sentence-BERT: Sentence embeddings using Siamese BERT-networks,'' in \textit{Proc. Conf. Empir. Methods Nat. Lang. Process. (EMNLP)}, 2019, pp. 3982--3992. doi: 10.18653/v1/D19-1410.
+\bibitem{song2020mpnet} K. Song, X. Tan, T. Qin, J. Lu, and T.-Y. Liu, ``MPNet: Masked and permuted pre-training for language understanding,'' in \textit{Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)}, 2020. \url{https://arxiv.org/abs/2004.09297}
+\bibitem{he2023debertav3} P. He, J. Gao, and W. Chen, ``DeBERTaV3: Improving DeBERTa using ELECTRA-style pre-training with gradient-disentangled embedding sharing,'' in \textit{Proc. Int. Conf. Learn. Represent. (ICLR)}, 2023. \url{https://arxiv.org/abs/2111.09543}
+\bibitem{williams2018mnli} A. Williams, N. Nangia, and S. Bowman, ``A broad-coverage challenge corpus for sentence understanding through inference,'' in \textit{Proc. Conf. North Amer. Chapter Assoc. Comput. Linguist. (NAACL)}, 2018, pp. 1112--1122. doi: 10.18653/v1/N18-1101.
+\bibitem{thorne2018fever} J. Thorne, A. Vlachos, C. Christodoulopoulos, and A. Mittal, ``FEVER: A large-scale dataset for fact extraction and VERification,'' in \textit{Proc. Conf. North Amer. Chapter Assoc. Comput. Linguist. (NAACL)}, 2018, pp. 809--819. doi: 10.18653/v1/N18-1074.
+\bibitem{nie2020anli} Y. Nie, A. Williams, E. Dinan, M. Bansal, J. Weston, and D. Kiela, ``Adversarial NLI: A new benchmark for natural language understanding,'' in \textit{Proc. Annu. Meeting Assoc. Comput. Linguist. (ACL)}, 2020. doi: 10.18653/v1/2020.acl-main.441.
+\bibitem{yin2019zeroshot} W. Yin, J. Hay, and D. Roth, ``Benchmarking zero-shot text classification: Datasets, evaluation and entailment approach,'' in \textit{Proc. Conf. Empir. Methods Nat. Lang. Process. (EMNLP)}, 2019. doi: 10.18653/v1/D19-1404.
+\bibitem{dijkstra1959} E. W. Dijkstra, ``A note on two problems in connexion with graphs,'' \textit{Numer. Math.}, vol. 1, pp. 269--271, 1959. doi: 10.1007/BF01386390.
+\bibitem{kingma2015adam} D. P. Kingma and J. Ba, ``Adam: A method for stochastic optimization,'' in \textit{Proc. Int. Conf. Learn. Represent. (ICLR)}, 2015. \url{https://arxiv.org/abs/1412.6980}
+\bibitem{efron1979bootstrap} B. Efron, ``Bootstrap methods: Another look at the jackknife,'' \textit{Ann. Statist.}, vol. 7, no. 1, pp. 1--26, 1979. doi: 10.1214/aos/1176344552.
+\bibitem{usgs3dep} U.S. Geological Survey, ``3D Elevation Program.'' [Online]. Available: \texttt{https://www.usgs.gov/3d-elevation-program}
+\end{thebibliography}
+
+\end{document}
